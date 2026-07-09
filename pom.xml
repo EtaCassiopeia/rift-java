@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.github.etacassiopeia</groupId>
+  <artifactId>rift-java-parent</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>rift-java (parent)</name>
+  <description>Official Java SDK for Rift — a Mountebank-compatible HTTP/HTTPS mock server.</description>
+  <url>https://github.com/EtaCassiopeia/rift-java</url>
+  <inceptionYear>2026</inceptionYear>
+
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <id>EtaCassiopeia</id>
+      <name>Mohsen Zainalpour</name>
+      <url>https://github.com/EtaCassiopeia</url>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/EtaCassiopeia/rift-java.git</connection>
+    <developerConnection>scm:git:git@github.com:EtaCassiopeia/rift-java.git</developerConnection>
+    <url>https://github.com/EtaCassiopeia/rift-java</url>
+    <tag>HEAD</tag>
+  </scm>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <!-- Base language level for the zero-dep modules. Embedded modules override this. -->
+    <maven.compiler.release>17</maven.compiler.release>
+
+    <!-- Dependency versions -->
+    <junit.version>5.11.4</junit.version>
+    <jackson.version>2.18.2</jackson.version>
+
+    <!-- Plugin versions -->
+    <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+    <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
+    <maven-jar-plugin.version>3.4.1</maven-jar-plugin.version>
+    <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
+    <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
+    <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
+    <central-publishing-plugin.version>0.8.0</central-publishing-plugin.version>
+  </properties>
+
+  <modules>
+    <module>rift-java-core</module>
+    <module>rift-java-jackson</module>
+    <module>rift-java-junit5</module>
+    <module>rift-java-natives</module>
+  </modules>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.junit</groupId>
+        <artifactId>junit-bom</artifactId>
+        <version>${junit.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- Intra-project modules -->
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>${maven-compiler-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>${maven-surefire-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-jar-plugin</artifactId>
+          <version>${maven-jar-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-source-plugin</artifactId>
+          <version>${maven-source-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-javadoc-plugin</artifactId>
+          <version>${maven-javadoc-plugin.version}</version>
+          <configuration>
+            <!-- Skeleton modules carry only package-info until their public API lands in later
+                 issues; don't let an empty module fail the javadoc jar Central requires. -->
+            <failOnError>false</failOnError>
+            <quiet>true</quiet>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+
+  <profiles>
+    <!-- Embedded (stable FFM) builds only on JDK 22+. FFM binding lands in #8. -->
+    <profile>
+      <id>embedded</id>
+      <activation>
+        <jdk>[22,)</jdk>
+      </activation>
+      <modules>
+        <module>rift-java-embedded</module>
+      </modules>
+    </profile>
+
+    <!-- The JDK 21 preview variant builds only on JDK 21. Preview FFM flags arrive with #11. -->
+    <profile>
+      <id>embedded-jdk21</id>
+      <activation>
+        <jdk>21</jdk>
+      </activation>
+      <modules>
+        <module>rift-java-embedded-jdk21</module>
+      </modules>
+    </profile>
+
+    <!-- Signing + sources + javadoc + Central publishing. Enabled explicitly on deploy. -->
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals>
+                  <goal>jar-no-fork</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>${maven-gpg-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+              </execution>
+            </executions>
+            <configuration>
+              <gpgArguments>
+                <arg>--pinentry-mode</arg>
+                <arg>loopback</arg>
+              </gpgArguments>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <version>${central-publishing-plugin.version}</version>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+              <!-- Snapshots deploy immediately; releases are auto-published once validated. -->
+              <autoPublish>true</autoPublish>
+              <waitUntil>validated</waitUntil>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

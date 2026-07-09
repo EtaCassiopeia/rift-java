@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.etacassiopeia</groupId>
+    <artifactId>rift-java-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>rift-java-embedded-jdk21</artifactId>
+  <name>rift-java-embedded-jdk21</name>
+  <description>In-process Rift engine on JDK 21 (preview FFM). Same sources as rift-java-embedded.</description>
+  <url>https://github.com/EtaCassiopeia/rift-java</url>
+
+  <properties>
+    <!-- The JDK 21 variant is reactor-activated by the `embedded-jdk21` profile (JDK 21 exactly).
+         Preview FFM flags are switched on in #11 when the binding is introduced. -->
+    <maven.compiler.release>21</maven.compiler.release>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.etacassiopeia</groupId>
+      <artifactId>rift-java-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
