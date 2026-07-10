@@ -68,6 +68,22 @@
               </sources>
             </configuration>
           </execution>
+          <execution>
+            <!-- Resources (e.g. the META-INF/services EmbeddedEngineProvider registration) aren't
+                 shared via add-source, so pull them in explicitly for this artifact too. -->
+            <id>add-resource</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>add-resource</goal>
+            </goals>
+            <configuration>
+              <resources>
+                <resource>
+                  <directory>${project.basedir}/../rift-java-embedded/src/main/resources</directory>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
       <plugin>

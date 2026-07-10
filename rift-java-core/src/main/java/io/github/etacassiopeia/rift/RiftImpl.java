@@ -55,6 +55,39 @@ final class RiftImpl implements Rift {
         return new RiftImpl(transport, options, onClose);
     }
 
+    /**
+     * Wraps an in-process ({@code rift-java-embedded}) transport. Unlike {@link #spawned}, the
+     * loaded cdylib's version is whatever the caller pointed {@code EmbeddedOptions} at — it isn't
+     * pinned by the SDK the way a downloaded/spawned binary is — so the preflight still runs here
+     * unless the caller opted out with {@code VersionCheck.OFF}.
+     */
+    static Rift embedded(RiftTransport transport, EmbeddedOptions options, Runnable onClose) {
+        if (options.versionCheck() != VersionCheck.OFF) {
+            // start() already loaded the native library and opened the transport. A version mismatch is
+            // a first-class outcome here, so release those native resources before propagating.
+            try {
+                preflight(transport, options.versionCheck());
+            } catch (RuntimeException e) {
+                try {
+                    transport.close();
+                } finally {
+                    onClose.run();
+                }
+                throw e;
+            }
+        }
+        // adminUri is a required constructor arg but is never read for an embedded transport (the
+        // transport already exists; RiftImpl#adminUri() delegates to transport.adminUri(), not this
+        // options object) — the hostResolver override below is what actually determines an
+        // imposter's uri(), so any placeholder value here is inert.
+        ConnectOptions.Builder builder = ConnectOptions
+                .builder(URI.create("http://" + options.adminHost() + ":" + options.adminPort()))
+                .versionCheck(VersionCheck.OFF)
+                .hostResolver(port -> URI.create("http://" + options.adminHost() + ":" + port));
+        options.apiKey().ifPresent(builder::apiKey);
+        return new RiftImpl(transport, builder.build(), onClose);
+    }
+
     private static void preflight(RiftTransport transport, VersionCheck mode) {
         String version;
         try {
