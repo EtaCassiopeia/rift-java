@@ -17,8 +17,11 @@
 
   <properties>
     <!-- Stable java.lang.foreign requires JDK 22+. This module is reactor-activated by the
-         `embedded` profile (JDK [22,)); FFM binding arrives in #8. -->
+         `embedded` profile (JDK [22,)). -->
     <maven.compiler.release>22</maven.compiler.release>
+    <!-- Path to a librift_ffi cdylib; the FFM integration tests run against it and skip when unset.
+         Override with -Drift.ffi.lib=/path/to/librift_ffi.<ext>. -->
+    <rift.ffi.lib></rift.ffi.lib>
   </properties>
 
   <dependencies>
@@ -32,4 +35,26 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- FFM downcalls are restricted methods; grant native access to silence the enforced warning. -->
+          <argLine>--enable-native-access=ALL-UNNAMED</argLine>
+          <systemPropertyVariables>
+            <rift.ffi.lib>${rift.ffi.lib}</rift.ffi.lib>
+          </systemPropertyVariables>
+          <!-- The real-FFM integration test is named *IT (its own convention here, not Failsafe's)
+               and would otherwise be skipped by Surefire's default *Test(s)/TestCase includes. -->
+          <includes>
+            <include>**/*Test.java</include>
+            <include>**/*IT.java</include>
+          </includes>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>
