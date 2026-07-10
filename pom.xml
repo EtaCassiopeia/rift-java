@@ -62,6 +62,7 @@
     <module>rift-java-jackson</module>
     <module>rift-java-junit5</module>
     <module>rift-java-natives</module>
+    <module>rift-java-spring</module>
   </modules>
 
   <dependencyManagement>

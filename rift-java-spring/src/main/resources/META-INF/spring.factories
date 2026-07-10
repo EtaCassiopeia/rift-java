@@ -1,0 +1,2 @@
+org.springframework.test.context.ContextCustomizerFactory=io.github.etacassiopeia.rift.spring.RiftContextCustomizerFactory
+org.springframework.test.context.TestExecutionListener=io.github.etacassiopeia.rift.spring.RiftTestExecutionListener
