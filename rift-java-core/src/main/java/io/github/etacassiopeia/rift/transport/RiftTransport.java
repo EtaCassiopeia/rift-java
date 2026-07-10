@@ -21,6 +21,13 @@ public interface RiftTransport extends AutoCloseable {
 
     JsonValue getImposter(int port);
 
+    /**
+     * The imposter definition, optionally exported in replayable form ({@code replayable=true})
+     * and/or with any proxy responses removed ({@code removeProxies=true}). Non-mutating even when
+     * both flags are set — the underlying admin-API call is a plain {@code GET}.
+     */
+    JsonValue getImposter(int port, boolean replayable, boolean removeProxies);
+
     void deleteImposter(int port);
 
     void deleteAll();

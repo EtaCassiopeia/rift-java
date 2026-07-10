@@ -28,6 +28,12 @@ public interface Imposter {
 
     StubRef addStub(JsonValue stub);
 
+    /** Starts a proxy recording to {@code originUrl} with the default {@link RecordSpec}. */
+    Recording startRecording(String originUrl);
+
+    /** Starts a proxy recording to {@code originUrl}, configured by {@code spec}. */
+    Recording startRecording(String originUrl, RecordSpec spec);
+
     void replaceStubs(List<StubSpec> specs);
 
     StubRef stub(String id);

@@ -59,6 +59,11 @@ public final class EmbeddedTransport implements RiftTransport {
     }
 
     @Override
+    public JsonValue getImposter(int port, boolean replayable, boolean removeProxies) {
+        return admin().getImposter(port, replayable, removeProxies);
+    }
+
+    @Override
     public void deleteImposter(int port) {
         calls.deleteImposter(port);
     }

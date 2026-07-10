@@ -73,6 +73,22 @@ public final class RemoteTransport implements RiftTransport {
     }
 
     @Override
+    public JsonValue getImposter(int port, boolean replayable, boolean removeProxies) {
+        List<String> params = new ArrayList<>();
+        if (replayable) {
+            params.add("replayable=true");
+        }
+        if (removeProxies) {
+            params.add("removeProxies=true");
+        }
+        String path = "/imposters/" + port;
+        if (!params.isEmpty()) {
+            path += "?" + String.join("&", params);
+        }
+        return executeJson("GET", path, null, OptionalInt.of(port));
+    }
+
+    @Override
     public void deleteImposter(int port) {
         executeVoid("DELETE", "/imposters/" + port, null, OptionalInt.of(port));
     }
@@ -112,7 +128,10 @@ public final class RemoteTransport implements RiftTransport {
 
     @Override
     public void replaceStubs(int port, JsonValue stubs) {
-        executeVoid("PUT", "/imposters/" + port + "/stubs", stubs.toJson(), OptionalInt.of(port));
+        // The admin API's PUT /imposters/{port}/stubs expects a {"stubs":[...]} envelope; a bare
+        // array is rejected (400). Callers pass the stubs array; wrap it here.
+        JsonValue body = JsonObject.builder().put("stubs", stubs).build();
+        executeVoid("PUT", "/imposters/" + port + "/stubs", body.toJson(), OptionalInt.of(port));
     }
 
     @Override

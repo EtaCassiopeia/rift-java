@@ -149,3 +149,6 @@ class UserClientTest {
 ```
 
 TLS-MITM intercept (`rift.intercept()`) is covered in [docs/intercept.md](docs/intercept.md).
+
+Proxy **record/replay** (`imposter.startRecording(origin)`) — capture real traffic and swap it for
+served stubs — is covered in [docs/recording.md](docs/recording.md).
