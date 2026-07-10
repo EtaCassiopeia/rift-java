@@ -2,9 +2,12 @@ package io.github.etacassiopeia.rift.junit5;
 
 import io.github.etacassiopeia.rift.Imposter;
 import io.github.etacassiopeia.rift.RecordedRequest;
+import io.github.etacassiopeia.rift.Recording;
 import io.github.etacassiopeia.rift.Rift;
 import io.github.etacassiopeia.rift.dsl.ImposterSpec;
+import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.ImposterDefinition;
+import io.github.etacassiopeia.rift.model.Stub;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
@@ -17,9 +20,13 @@ import org.junit.jupiter.api.extension.TestWatcher;
 import org.junit.platform.commons.support.AnnotationSupport;
 import org.junit.platform.commons.support.HierarchyTraversalMode;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -75,6 +82,7 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
             Map<String, Imposter> impostersByName = createImposters(rift, resolved.imposters());
             RiftTestContext riftTestContext =
                     new RiftTestContext(rift, impostersByName, resolved.reset(), resolved.dumpRecordedOnFailure());
+            applyGolden(context.getRequiredTestClass(), impostersByName, riftTestContext);
             if (resolved.reset() == Reset.PER_CLASS) {
                 riftTestContext.resetConfiguredImposters();
             }
@@ -88,6 +96,64 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
                 e.addSuppressed(closeFailure);
             }
             throw e;
+        }
+    }
+
+    /**
+     * Wires {@code @RiftGolden} (if present on {@code testClass}) into the target imposter: REPLAY
+     * loads the persisted stubs and installs them directly (no network); CAPTURE starts a {@link
+     * Recording} against {@link RiftGolden#origin()} and hands it to {@code riftTestContext} so
+     * {@link RiftTestContext#close()} persists it once the class's tests have run.
+     */
+    private static void applyGolden(Class<?> testClass, Map<String, Imposter> impostersByName,
+            RiftTestContext riftTestContext) {
+        RiftGolden golden = AnnotationSupport.findAnnotation(testClass, RiftGolden.class).orElse(null);
+        if (golden == null) {
+            return;
+        }
+        Imposter imposter = goldenImposter(golden, impostersByName);
+        boolean recapture = "recapture".equals(System.getProperty("rift.golden"));
+        Path file = Path.of(golden.file());
+        if (Files.exists(file) && !recapture) {
+            replayGolden(imposter, file);
+        } else {
+            riftTestContext.setGoldenCapture(imposter.startRecording(golden.origin()), file);
+        }
+    }
+
+    private static Imposter goldenImposter(RiftGolden golden, Map<String, Imposter> impostersByName) {
+        if (!golden.imposter().isBlank()) {
+            Imposter imposter = impostersByName.get(golden.imposter());
+            if (imposter == null) {
+                throw new IllegalStateException("@RiftGolden(imposter = \"" + golden.imposter()
+                        + "\") not found; configured imposters: " + impostersByName.keySet());
+            }
+            return imposter;
+        }
+        if (impostersByName.size() != 1) {
+            throw new IllegalStateException(
+                    "@RiftGolden without imposter() requires exactly one configured imposter, found "
+                            + impostersByName.keySet() + "; set @RiftGolden(imposter = \"...\") to disambiguate");
+        }
+        return impostersByName.values().iterator().next();
+    }
+
+    private static void replayGolden(Imposter imposter, Path file) {
+        String content;
+        try {
+            content = Files.readString(file);
+        } catch (IOException e) {
+            throw new UncheckedIOException("failed to read golden file " + file, e);
+        }
+        List<Stub> stubs = ImposterDefinition.fromJson(content).stubs();
+        if (stubs.isEmpty()) {
+            // A present-but-stubless golden file (empty, truncated, or a capture that recorded
+            // nothing) would replay as a live imposter that serves nothing — fail loudly instead.
+            throw new IllegalStateException("golden file " + file + " has no stubs; delete it to "
+                    + "re-capture, or run with -Drift.golden=recapture");
+        }
+        for (Stub stub : stubs) {
+            imposter.addStub(JsonValue.parse(stub.toJson()));
         }
     }
 

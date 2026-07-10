@@ -1,8 +1,13 @@
 package io.github.etacassiopeia.rift.junit5;
 
 import io.github.etacassiopeia.rift.Imposter;
+import io.github.etacassiopeia.rift.Recording;
 import io.github.etacassiopeia.rift.Rift;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -20,6 +25,10 @@ final class RiftTestContext {
     private final Reset reset;
     private final boolean dumpRecordedOnFailure;
     private volatile boolean closed;
+
+    /** Set only when {@code @RiftGolden} is CAPTURE-ing; {@code afterAll} persists it before closing. */
+    private Recording goldenRecording;
+    private Path goldenFile;
 
     RiftTestContext(Rift rift, Map<String, Imposter> impostersByName, Reset reset, boolean dumpRecordedOnFailure) {
         this.rift = rift;
@@ -70,11 +79,36 @@ final class RiftTestContext {
         }
     }
 
+    /** Records a golden CAPTURE in progress; {@link #close()} persists it to {@code file} before closing the engine. */
+    void setGoldenCapture(Recording recording, Path file) {
+        this.goldenRecording = recording;
+        this.goldenFile = file;
+    }
+
     void close() {
         if (closed) {
             return;
         }
         closed = true;
-        rift.close();
+        try {
+            if (goldenRecording != null) {
+                persistGolden();
+            }
+        } finally {
+            rift.close();
+        }
+    }
+
+    /** Persist uses the transport, so it must run while the engine is still open — before {@link Rift#close()}. */
+    private void persistGolden() {
+        try {
+            Path parent = goldenFile.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("failed to create parent directories for golden file " + goldenFile, e);
+        }
+        goldenRecording.persist(goldenFile);
     }
 }

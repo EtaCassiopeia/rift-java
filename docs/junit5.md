@@ -193,3 +193,34 @@ class OrderFlowTest {
 
 Most IDEs and the Surefire/Gradle reports surface report entries next to the failed test; only
 imposters that actually recorded a request produce an entry.
+
+## Golden files (`@RiftGolden`)
+
+`@RiftGolden` records a real upstream once and replays it forever after — Hoverfly-style
+auto-capture with zero mode-switching. Add it to a `@RiftTest` class alongside the imposter to
+record:
+
+```java
+@RiftTest
+@RiftGolden(origin = "https://api.real-service.com",
+            file = "src/test/resources/golden/users-api.json")
+class UsersGoldenTest {
+    @RiftImposter
+    static ImposterSpec users = imposter("users").record();
+
+    @InjectImposter("users") Imposter usersMock;
+
+    @Test void fetchesUser() { /* drive your SUT through usersMock.uri() */ }
+}
+```
+
+- **file missing → CAPTURE**: the imposter proxies to `origin`, records the traffic, and the
+  recorded stubs are written to `file` when the class finishes.
+- **file present → REPLAY**: the recorded stubs are loaded from `file` and served directly — no
+  network, so CI (which has the committed golden file) never touches the origin.
+- `-Drift.golden=recapture` forces CAPTURE even when the file exists (refresh the recording).
+
+Commit the golden file. The persisted format is the engine's replayable imposter JSON — portable
+across the rift SDKs and loadable by `rift --configfile`. `@RiftGolden` targets the sole
+`@RiftImposter` on the class, or the one named by `@RiftGolden(imposter = "...")` when there is more
+than one. It builds on the core [`Recording` API](recording.md).
