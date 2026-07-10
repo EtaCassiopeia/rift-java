@@ -41,12 +41,12 @@ class ImposterFieldsRoundTripTest {
 
     @Test
     void defaultResponseRoundTrips() {
-        RoundTripAssertions.assertRoundTrips(DEFAULT_RESPONSE_JSON, Imposter::fromJson, Imposter::toJson);
+        RoundTripAssertions.assertRoundTrips(DEFAULT_RESPONSE_JSON, ImposterDefinition::fromJson, ImposterDefinition::toJson);
     }
 
     @Test
     void defaultResponseStatusCodeIsWrittenAsJsonNumber() {
-        Imposter imposter = Imposter.fromJson(DEFAULT_RESPONSE_JSON);
+        ImposterDefinition imposter = ImposterDefinition.fromJson(DEFAULT_RESPONSE_JSON);
         assertEquals("404", imposter.defaultResponse().orElseThrow().statusCode());
         String written = imposter.toJson();
         assertTrue(written.contains("\"statusCode\":404"), () -> "expected a numeric statusCode, got: " + written);
@@ -55,12 +55,12 @@ class ImposterFieldsRoundTripTest {
 
     @Test
     void scalarFieldsRoundTrip() {
-        RoundTripAssertions.assertRoundTrips(SCALAR_FIELDS_JSON, Imposter::fromJson, Imposter::toJson);
+        RoundTripAssertions.assertRoundTrips(SCALAR_FIELDS_JSON, ImposterDefinition::fromJson, ImposterDefinition::toJson);
     }
 
     @Test
     void scalarFieldsAreTyped() {
-        Imposter imposter = Imposter.fromJson(SCALAR_FIELDS_JSON);
+        ImposterDefinition imposter = ImposterDefinition.fromJson(SCALAR_FIELDS_JSON);
         assertEquals("0.0.0.0", imposter.host().orElseThrow());
         assertEquals("CERT_PEM_DATA", imposter.cert().orElseThrow());
         assertEquals("KEY_PEM_DATA", imposter.key().orElseThrow());
@@ -73,11 +73,11 @@ class ImposterFieldsRoundTripTest {
 
     @Test
     void allowCorsAcceptsBothSpellingsAndWritesCanonicalAllowCORS() {
-        Imposter viaAlias = Imposter.fromJson("{\"protocol\":\"http\",\"stubs\":[],\"allowCORS\":true}");
+        ImposterDefinition viaAlias = ImposterDefinition.fromJson("{\"protocol\":\"http\",\"stubs\":[],\"allowCORS\":true}");
         assertTrue(viaAlias.allowCors());
         assertTrue(viaAlias.toJson().contains("\"allowCORS\":true"));
 
-        Imposter viaEngineSpelling = Imposter.fromJson("{\"protocol\":\"http\",\"stubs\":[],\"allowCors\":true}");
+        ImposterDefinition viaEngineSpelling = ImposterDefinition.fromJson("{\"protocol\":\"http\",\"stubs\":[],\"allowCors\":true}");
         assertTrue(viaEngineSpelling.allowCors());
         assertTrue(viaEngineSpelling.toJson().contains("\"allowCORS\":true"));
     }

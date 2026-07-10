@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The public escape hatches ({@code Imposter.fromJson}/{@code toJson}, {@code
+ * The public escape hatches ({@code ImposterDefinition.fromJson}/{@code toJson}, {@code
  * Stub.fromJson}/{@code toJson}) parse and round-trip happy-path input, and throw a typed codec
  * error — never a generic NullPointerException or ClassCastException — on malformed input.
  */
@@ -16,7 +16,7 @@ class EscapeHatchTest {
 
     @Test
     void imposterFromJsonHappyPath() {
-        Imposter imposter = Imposter.fromJson("""
+        ImposterDefinition imposter = ImposterDefinition.fromJson("""
                 {
                   "port": 5000,
                   "protocol": "http",
@@ -35,13 +35,13 @@ class EscapeHatchTest {
     @Test
     void imposterFromJsonMalformedSyntaxThrowsTypedError() {
         // Unterminated object: a genuine JSON syntax error, not a shape problem.
-        assertThrows(JsonParseException.class, () -> Imposter.fromJson("{ \"port\": 4545, "));
+        assertThrows(JsonParseException.class, () -> ImposterDefinition.fromJson("{ \"port\": 4545, "));
     }
 
     @Test
     void imposterFromJsonMalformedShapeThrowsTypedError() {
         // Well-formed JSON, but "port" must be a number, not a string.
-        assertThrows(WireFormatException.class, () -> Imposter.fromJson("{\"port\": \"not-a-number\", \"stubs\": []}"));
+        assertThrows(WireFormatException.class, () -> ImposterDefinition.fromJson("{\"port\": \"not-a-number\", \"stubs\": []}"));
     }
 
     @Test

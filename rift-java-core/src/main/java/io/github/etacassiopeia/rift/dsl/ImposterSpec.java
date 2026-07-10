@@ -1,17 +1,18 @@
 package io.github.etacassiopeia.rift.dsl;
 
-import io.github.etacassiopeia.rift.model.Imposter;
+import io.github.etacassiopeia.rift.model.ImposterDefinition;
 import io.github.etacassiopeia.rift.model.Stub;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
  * An imposter under construction, created by {@link RiftDsl#imposter(String)}.
  *
  * <p>Instances are immutable: every chain method returns a new {@code ImposterSpec}. The terminal
- * {@link #build()} produces the {@link Imposter} model value.
+ * {@link #build()} produces the {@link ImposterDefinition} model value.
  */
 public final class ImposterSpec {
 
@@ -25,7 +26,7 @@ public final class ImposterSpec {
     private final Optional<ResponseSpec> defaultResponse;
 
     ImposterSpec(String name) {
-        this(name, Optional.empty(), Imposter.DEFAULT_PROTOCOL, false, false, false, List.of(), Optional.empty());
+        this(name, Optional.empty(), ImposterDefinition.DEFAULT_PROTOCOL, false, false, false, List.of(), Optional.empty());
     }
 
     private ImposterSpec(
@@ -93,11 +94,11 @@ public final class ImposterSpec {
         return new ImposterSpec(name, port, protocol, recordRequests, recordMatches, allowCors, List.copyOf(next), defaultResponse);
     }
 
-    /** Builds the immutable {@link Imposter} this spec represents. */
-    public Imposter build() {
-        return new Imposter(
+    /** Builds the immutable {@link ImposterDefinition} this spec represents. */
+    public ImposterDefinition build() {
+        return new ImposterDefinition(
                 port, Optional.empty(), protocol, Optional.empty(), Optional.empty(), Optional.of(name),
                 recordRequests, recordMatches, stubs, defaultResponse.map(ResponseSpec::buildIsResponse),
-                Optional.empty(), allowCors, false, Optional.empty(), Optional.empty(), Optional.empty());
+                Optional.empty(), allowCors, false, Optional.empty(), Optional.empty(), Optional.empty(), Map.of());
     }
 }

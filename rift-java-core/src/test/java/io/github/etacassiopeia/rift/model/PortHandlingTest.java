@@ -17,7 +17,7 @@ class PortHandlingTest {
 
     @Test
     void explicitPortSurvivesVerbatim() {
-        Imposter imposter = Imposter.fromJson("""
+        ImposterDefinition imposter = ImposterDefinition.fromJson("""
                 {"port": 4545, "protocol": "http", "stubs": []}
                 """);
 
@@ -27,7 +27,7 @@ class PortHandlingTest {
 
     @Test
     void omittedPortStaysAbsentAndIsNeverInvented() {
-        Imposter imposter = Imposter.fromJson("""
+        ImposterDefinition imposter = ImposterDefinition.fromJson("""
                 {"protocol": "http", "stubs": []}
                 """);
 
@@ -40,10 +40,10 @@ class PortHandlingTest {
         String json = """
                 {"imposters": [{"protocol": "http", "stubs": []}]}
                 """;
-        Imposters model = Imposters.fromJson(json);
+        ImposterDefinitions model = ImposterDefinitions.fromJson(json);
         assertEquals(Optional.empty(), model.imposters().get(0).port());
 
-        Imposters roundTripped = Imposters.fromJson(model.toJson());
+        ImposterDefinitions roundTripped = ImposterDefinitions.fromJson(model.toJson());
         assertEquals(Optional.empty(), roundTripped.imposters().get(0).port());
         assertFalse(model.toJson().contains("\"port\""), model.toJson());
     }

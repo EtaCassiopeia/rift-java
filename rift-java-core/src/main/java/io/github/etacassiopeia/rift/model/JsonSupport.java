@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
 /** Small extraction helpers shared by every {@code *Codec}-shaped method in this package. */
@@ -144,6 +145,48 @@ final class JsonSupport {
     /** Order-preserving unmodifiable copy, so re-serialized output stays deterministic. */
     static <K, V> Map<K, V> orderedCopy(Map<K, V> map) {
         return Collections.unmodifiableMap(new LinkedHashMap<>(map));
+    }
+
+    /**
+     * The keys of {@code obj} not named in {@code modeledKeys}, in insertion order — the unknown/
+     * future keys an aggregate record round-trips through its {@code extra} escape hatch instead of
+     * dropping. Returns a mutable map; the caller wraps it in {@link #orderedCopy}.
+     */
+    static Map<String, JsonValue> extraFields(JsonObject obj, Set<String> modeledKeys) {
+        Map<String, JsonValue> out = new LinkedHashMap<>();
+        for (var e : obj.fields().entrySet()) {
+            if (!modeledKeys.contains(e.getKey())) {
+                out.put(e.getKey(), e.getValue());
+            }
+        }
+        return out;
+    }
+
+    /** A copy of {@code obj} with {@code keys} removed, preserving order — used to split a flat
+     * response's is-content from its response-level siblings ({@code _behaviors}/{@code behaviors}). */
+    static JsonObject withoutKeys(JsonObject obj, String... keys) {
+        Set<String> remove = Set.of(keys);
+        JsonObject.Builder builder = JsonObject.builder();
+        for (var e : obj.fields().entrySet()) {
+            if (!remove.contains(e.getKey())) {
+                builder.put(e.getKey(), e.getValue());
+            }
+        }
+        return builder.build();
+    }
+
+    /**
+     * Rejects a modeled key appearing in an {@code extra} map: it would be ambiguous which value
+     * (the typed component or the {@code extra} entry) wins on write, so a caller that constructs
+     * such a record is signalling a bug.
+     */
+    static void rejectModeledExtraKeys(Map<String, JsonValue> extra, Set<String> modeledKeys, String context) {
+        for (String key : extra.keySet()) {
+            if (modeledKeys.contains(key)) {
+                throw new WireFormatException(
+                        context + ": modeled key '" + key + "' must not appear in the extra map");
+            }
+        }
     }
 
     static String typeName(JsonValue v) {

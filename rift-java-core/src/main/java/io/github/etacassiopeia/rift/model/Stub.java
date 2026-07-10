@@ -5,12 +5,20 @@ import io.github.etacassiopeia.rift.json.JsonObject;
 import io.github.etacassiopeia.rift.json.JsonString;
 import io.github.etacassiopeia.rift.json.JsonValue;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * A stub: predicates to match a request, and the responses to serve (cycled) when it matches, plus
  * scenario-FSM and correlated-isolation ("space") extensions.
+ *
+ * <p>{@code extra} carries any wire keys not modeled above, so unknown/future engine fields survive
+ * a parse → serialize round-trip instead of being dropped (re-emitted after the modeled keys, in
+ * insertion order). A modeled key appearing in {@code extra} is rejected at construction.
  */
 public record Stub(
         Optional<String> scenarioName,
@@ -22,24 +30,32 @@ public record Stub(
         List<Predicate> predicates,
         List<Response> responses,
         Optional<String> recordedFrom,
-        Optional<JsonValue> verify) {
+        Optional<JsonValue> verify,
+        Map<String, JsonValue> extra) {
+
+    private static final Set<String> MODELED_KEYS = Set.of(
+            "scenarioName", "requiredScenarioState", "newScenarioState", "space", "id", "routePattern",
+            "predicates", "responses", "recordedFrom", "_verify");
 
     public Stub {
-        java.util.Objects.requireNonNull(scenarioName, "scenarioName");
-        java.util.Objects.requireNonNull(requiredScenarioState, "requiredScenarioState");
-        java.util.Objects.requireNonNull(newScenarioState, "newScenarioState");
-        java.util.Objects.requireNonNull(space, "space");
-        java.util.Objects.requireNonNull(id, "id");
-        java.util.Objects.requireNonNull(routePattern, "routePattern");
+        Objects.requireNonNull(scenarioName, "scenarioName");
+        Objects.requireNonNull(requiredScenarioState, "requiredScenarioState");
+        Objects.requireNonNull(newScenarioState, "newScenarioState");
+        Objects.requireNonNull(space, "space");
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(routePattern, "routePattern");
         predicates = List.copyOf(predicates);
         responses = List.copyOf(responses);
-        java.util.Objects.requireNonNull(recordedFrom, "recordedFrom");
-        java.util.Objects.requireNonNull(verify, "verify");
+        Objects.requireNonNull(recordedFrom, "recordedFrom");
+        Objects.requireNonNull(verify, "verify");
+        Objects.requireNonNull(extra, "extra");
+        JsonSupport.rejectModeledExtraKeys(extra, MODELED_KEYS, "stub");
+        extra = JsonSupport.orderedCopy(extra);
     }
 
     public Stub(List<Predicate> predicates, List<Response> responses) {
         this(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
-                Optional.empty(), predicates, responses, Optional.empty(), Optional.empty());
+                Optional.empty(), predicates, responses, Optional.empty(), Optional.empty(), Map.of());
     }
 
     /** Parses a single stub JSON object. Throws a typed codec error on malformed input. */
@@ -49,6 +65,16 @@ public record Stub(
 
     public String toJson() {
         return toJsonValue().toJson();
+    }
+
+    /** Returns a copy with {@code key}/{@code value} added to {@code extra}; rejects a modeled key. */
+    public Stub withExtra(String extraKey, JsonValue value) {
+        Objects.requireNonNull(extraKey, "extraKey");
+        Objects.requireNonNull(value, "value");
+        Map<String, JsonValue> next = new LinkedHashMap<>(extra);
+        next.put(extraKey, value);
+        return new Stub(scenarioName, requiredScenarioState, newScenarioState, space, id, routePattern,
+                predicates, responses, recordedFrom, verify, next);
     }
 
     static Stub read(JsonObject obj) {
@@ -62,7 +88,8 @@ public record Stub(
                 JsonSupport.optArray(obj, "predicates", v -> Predicate.read(JsonSupport.requireObject(v, "predicates[]"))),
                 JsonSupport.optArray(obj, "responses", v -> Response.read(JsonSupport.requireObject(v, "responses[]"))),
                 JsonSupport.optString(obj, "recordedFrom"),
-                Optional.ofNullable(obj.get("_verify")));
+                Optional.ofNullable(obj.get("_verify")),
+                JsonSupport.extraFields(obj, MODELED_KEYS));
     }
 
     JsonObject toJsonValue() {
@@ -77,6 +104,7 @@ public record Stub(
         builder.put("responses", new JsonArray(responses.stream().map(r -> (JsonValue) r.toJsonValue()).toList()));
         recordedFrom.ifPresent(v -> builder.put("recordedFrom", new JsonString(v)));
         verify.ifPresent(v -> builder.put("_verify", v));
+        extra.forEach(builder::put);
         return builder.build();
     }
 }

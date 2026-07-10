@@ -25,7 +25,7 @@ import java.util.Optional;
  * an imposter as a single expression:
  *
  * <pre>{@code
- * Imposter imposter = imposter("Basic REST API")
+ * ImposterDefinition imposter = imposter("Basic REST API")
  *         .port(4545)
  *         .stub(onGet("/health").willReturn(ok().withTextBody("OK")))
  *         .build();

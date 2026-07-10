@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Imposter-level {@code _rift} configuration block: flow state (including its Redis backend),
+ * ImposterDefinition-level {@code _rift} configuration block: flow state (including its Redis backend),
  * script engine defaults, the named script registry, metrics, and proxy configuration. None of
  * this appears in any corpus fixture; hand-written spec-derived round-trip test (G2 + G3).
  */
@@ -40,12 +40,12 @@ class RiftConfigRoundTripTest {
 
     @Test
     void riftConfigRoundTrips() {
-        RoundTripAssertions.assertRoundTrips(JSON, Imposter::fromJson, Imposter::toJson);
+        RoundTripAssertions.assertRoundTrips(JSON, ImposterDefinition::fromJson, ImposterDefinition::toJson);
     }
 
     @Test
     void riftConfigFieldsAreTyped() {
-        Imposter imposter = Imposter.fromJson(JSON);
+        ImposterDefinition imposter = ImposterDefinition.fromJson(JSON);
         RiftConfig rift = imposter.rift().orElseThrow();
 
         RiftFlowStateConfig flowState = rift.flowState().orElseThrow();

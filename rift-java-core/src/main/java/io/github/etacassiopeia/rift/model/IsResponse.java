@@ -9,7 +9,9 @@ import io.github.etacassiopeia.rift.json.JsonValue;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * A literal ("is") response: status, headers, body, and body encoding mode.
@@ -20,20 +22,44 @@ import java.util.Optional;
  * <p>{@code headers} supports Mountebank's multi-value convention: a header may appear as a bare
  * string (one value) or an array (multiple values); a single value is always written back as a
  * bare string, never a one-element array, so re-serializing always converges on the same shape.
+ *
+ * <p>{@code extra} carries any wire keys not modeled above, so unknown/future engine fields on an
+ * {@code is} object survive a parse → serialize round-trip instead of being dropped (re-emitted
+ * after the modeled keys, in insertion order). A modeled key in {@code extra} is rejected at
+ * construction.
  */
-public record IsResponse(String statusCode, Map<String, List<String>> headers, Optional<JsonValue> body, ResponseMode mode) {
+public record IsResponse(String statusCode, Map<String, List<String>> headers, Optional<JsonValue> body,
+        ResponseMode mode, Map<String, JsonValue> extra) {
 
     public static final String DEFAULT_STATUS_CODE = "200";
 
+    private static final Set<String> MODELED_KEYS = Set.of("statusCode", "headers", "body", "_mode");
+
     public IsResponse {
-        java.util.Objects.requireNonNull(statusCode, "statusCode");
+        Objects.requireNonNull(statusCode, "statusCode");
         headers = JsonSupport.orderedCopy(headers);
-        java.util.Objects.requireNonNull(body, "body");
-        java.util.Objects.requireNonNull(mode, "mode");
+        Objects.requireNonNull(body, "body");
+        Objects.requireNonNull(mode, "mode");
+        Objects.requireNonNull(extra, "extra");
+        JsonSupport.rejectModeledExtraKeys(extra, MODELED_KEYS, "is response");
+        extra = JsonSupport.orderedCopy(extra);
     }
 
     public IsResponse(String statusCode) {
-        this(statusCode, Map.of(), Optional.empty(), ResponseMode.TEXT);
+        this(statusCode, Map.of(), Optional.empty(), ResponseMode.TEXT, Map.of());
+    }
+
+    public IsResponse(String statusCode, Map<String, List<String>> headers, Optional<JsonValue> body, ResponseMode mode) {
+        this(statusCode, headers, body, mode, Map.of());
+    }
+
+    /** Returns a copy with {@code key}/{@code value} added to {@code extra}; rejects a modeled key. */
+    public IsResponse withExtra(String extraKey, JsonValue value) {
+        Objects.requireNonNull(extraKey, "extraKey");
+        Objects.requireNonNull(value, "value");
+        Map<String, JsonValue> next = new LinkedHashMap<>(extra);
+        next.put(extraKey, value);
+        return new IsResponse(statusCode, headers, body, mode, next);
     }
 
     static IsResponse read(JsonObject obj) {
@@ -43,7 +69,8 @@ public record IsResponse(String statusCode, Map<String, List<String>> headers, O
                 Optional.ofNullable(obj.get("body")),
                 Optional.ofNullable(obj.get("_mode"))
                         .map(v -> ResponseMode.read(JsonSupport.requireString(v, "'_mode'")))
-                        .orElse(ResponseMode.TEXT));
+                        .orElse(ResponseMode.TEXT),
+                JsonSupport.extraFields(obj, MODELED_KEYS));
     }
 
     static String readStatusCode(JsonValue v) {
@@ -107,6 +134,7 @@ public record IsResponse(String statusCode, Map<String, List<String>> headers, O
         if (mode != ResponseMode.TEXT) {
             builder.put("_mode", new JsonString(mode.wire()));
         }
+        extra.forEach(builder::put);
         return builder.build();
     }
 

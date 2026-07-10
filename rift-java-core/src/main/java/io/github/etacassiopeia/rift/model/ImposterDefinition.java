@@ -7,12 +7,17 @@ import io.github.etacassiopeia.rift.json.JsonObject;
 import io.github.etacassiopeia.rift.json.JsonString;
 import io.github.etacassiopeia.rift.json.JsonValue;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
- * An imposter: the port it binds (or {@link Optional#empty()} for an OS-assigned port), the
- * protocol, its stubs, and Mountebank/Rift-extension configuration.
+ * An imposter definition: the port it binds (or {@link Optional#empty()} for an OS-assigned port),
+ * the protocol, its stubs, and Mountebank/Rift-extension configuration. This is the wire-model
+ * value; the transport-bound live handle a client hands back is the separate {@code Imposter} type.
  *
  * <p>{@code allowCORS} is <em>written</em> with that exact wire key (not the {@code allowCors} the
  * engine's default {@code camelCase} rename would otherwise produce) because every corpus fixture
@@ -20,8 +25,12 @@ import java.util.Optional;
  * a deserialize-only {@code alias}. On <em>read</em> both spellings are accepted, since the engine's
  * own serializer emits {@code allowCors} in {@code GET /imposters} output; consuming that output
  * must not silently lose the flag.
+ *
+ * <p>{@code extra} carries any wire keys not modeled above, so unknown/future engine fields survive
+ * a parse → serialize round-trip instead of being dropped. They are re-emitted after the modeled
+ * keys, in insertion order. A modeled key appearing in {@code extra} is rejected at construction.
  */
-public record Imposter(
+public record ImposterDefinition(
         Optional<Integer> port,
         Optional<String> host,
         String protocol,
@@ -37,33 +46,43 @@ public record Imposter(
         boolean strictBehaviors,
         Optional<String> serviceName,
         Optional<JsonValue> serviceInfo,
-        Optional<RiftConfig> rift) {
+        Optional<RiftConfig> rift,
+        Map<String, JsonValue> extra) {
 
     public static final String DEFAULT_PROTOCOL = "http";
 
-    public Imposter {
-        java.util.Objects.requireNonNull(port, "port");
-        java.util.Objects.requireNonNull(host, "host");
-        java.util.Objects.requireNonNull(protocol, "protocol");
-        java.util.Objects.requireNonNull(cert, "cert");
-        java.util.Objects.requireNonNull(key, "key");
-        java.util.Objects.requireNonNull(name, "name");
+    /** Wire keys owned by typed components; both {@code allowCORS} spellings are reserved. */
+    private static final Set<String> MODELED_KEYS = Set.of(
+            "port", "host", "protocol", "cert", "key", "name", "recordRequests", "recordMatches",
+            "stubs", "defaultResponse", "defaultForward", "allowCORS", "allowCors", "strictBehaviors",
+            "serviceName", "serviceInfo", "_rift");
+
+    public ImposterDefinition {
+        Objects.requireNonNull(port, "port");
+        Objects.requireNonNull(host, "host");
+        Objects.requireNonNull(protocol, "protocol");
+        Objects.requireNonNull(cert, "cert");
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(name, "name");
         stubs = List.copyOf(stubs);
-        java.util.Objects.requireNonNull(defaultResponse, "defaultResponse");
-        java.util.Objects.requireNonNull(defaultForward, "defaultForward");
-        java.util.Objects.requireNonNull(serviceName, "serviceName");
-        java.util.Objects.requireNonNull(serviceInfo, "serviceInfo");
-        java.util.Objects.requireNonNull(rift, "rift");
+        Objects.requireNonNull(defaultResponse, "defaultResponse");
+        Objects.requireNonNull(defaultForward, "defaultForward");
+        Objects.requireNonNull(serviceName, "serviceName");
+        Objects.requireNonNull(serviceInfo, "serviceInfo");
+        Objects.requireNonNull(rift, "rift");
+        Objects.requireNonNull(extra, "extra");
+        JsonSupport.rejectModeledExtraKeys(extra, MODELED_KEYS, "imposter");
+        extra = JsonSupport.orderedCopy(extra);
     }
 
-    public Imposter(Optional<Integer> port, String protocol, List<Stub> stubs) {
+    public ImposterDefinition(Optional<Integer> port, String protocol, List<Stub> stubs) {
         this(port, Optional.empty(), protocol, Optional.empty(), Optional.empty(), Optional.empty(),
                 false, false, stubs, Optional.empty(), Optional.empty(), false, false,
-                Optional.empty(), Optional.empty(), Optional.empty());
+                Optional.empty(), Optional.empty(), Optional.empty(), Map.of());
     }
 
     /** Parses a single imposter JSON object. Throws a typed codec error on malformed input. */
-    public static Imposter fromJson(String json) {
+    public static ImposterDefinition fromJson(String json) {
         return read(JsonSupport.requireObject(JsonValue.parse(json), "imposter"));
     }
 
@@ -71,8 +90,19 @@ public record Imposter(
         return toJsonValue().toJson();
     }
 
-    static Imposter read(JsonObject obj) {
-        return new Imposter(
+    /** Returns a copy with {@code key}/{@code value} added to {@code extra}; rejects a modeled key. */
+    public ImposterDefinition withExtra(String extraKey, JsonValue value) {
+        Objects.requireNonNull(extraKey, "extraKey");
+        Objects.requireNonNull(value, "value");
+        Map<String, JsonValue> next = new LinkedHashMap<>(extra);
+        next.put(extraKey, value);
+        return new ImposterDefinition(port, host, protocol, cert, key, name, recordRequests,
+                recordMatches, stubs, defaultResponse, defaultForward, allowCors, strictBehaviors,
+                serviceName, serviceInfo, rift, next);
+    }
+
+    static ImposterDefinition read(JsonObject obj) {
+        return new ImposterDefinition(
                 JsonSupport.optIntBox(obj, "port"),
                 JsonSupport.optString(obj, "host"),
                 JsonSupport.optString(obj, "protocol").orElse(DEFAULT_PROTOCOL),
@@ -88,7 +118,8 @@ public record Imposter(
                 JsonSupport.optBool(obj, "strictBehaviors", false),
                 JsonSupport.optString(obj, "serviceName"),
                 Optional.ofNullable(obj.get("serviceInfo")),
-                Optional.ofNullable(obj.get("_rift")).map(v -> RiftConfig.read(JsonSupport.requireObject(v, "_rift"))));
+                Optional.ofNullable(obj.get("_rift")).map(v -> RiftConfig.read(JsonSupport.requireObject(v, "_rift"))),
+                JsonSupport.extraFields(obj, MODELED_KEYS));
     }
 
     /**
@@ -135,6 +166,7 @@ public record Imposter(
         serviceName.ifPresent(v -> builder.put("serviceName", new JsonString(v)));
         serviceInfo.ifPresent(v -> builder.put("serviceInfo", v));
         rift.ifPresent(v -> builder.put("_rift", v.toJsonValue()));
+        extra.forEach(builder::put);
         return builder.build();
     }
 }
