@@ -30,4 +30,24 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- These "IT" fixtures (RiftExtensionIT, RiftResetIT) are portable, in-process tests
+               against FakeRiftAdmin — no native engine required — so they run in the ordinary
+               `test` phase alongside the *Test classes, rather than being reserved for failsafe's
+               `verify` phase (this module has no failsafe binding). -->
+          <includes>
+            <include>**/*Test.java</include>
+            <include>**/*Tests.java</include>
+            <include>**/*IT.java</include>
+          </includes>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>
