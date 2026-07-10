@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.etacassiopeia</groupId>
+    <artifactId>rift-java-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>rift-java-spring</artifactId>
+  <name>rift-java-spring</name>
+  <description>Spring Boot test integration for rift-java: @EnableRift/@ConfigureImposter/@InjectImposter.</description>
+  <url>https://github.com/EtaCassiopeia/rift-java</url>
+
+  <properties>
+    <!-- Spring Boot 3.2 baseline = JDK 17, matches rift-java-core. Manages spring-framework + boot-test versions. -->
+    <spring-boot.version>3.2.12</spring-boot.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.etacassiopeia</groupId>
+      <artifactId>rift-java-core</artifactId>
+    </dependency>
+
+    <!-- The app under test supplies Spring; keep it off the consumer's runtime classpath. -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-context</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-test</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-test</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- Tests: full Boot slice to exercise @SpringBootTest + @ConfigurationProperties binding. -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

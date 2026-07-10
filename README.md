@@ -34,6 +34,7 @@ try (Rift rift = Rift.embedded()) {                  // or Rift.connect(uri) / R
 | `rift-java-natives` | — | per-platform classifier jars bundling the cdylib |
 | `rift-java-junit5` | 17+ | `@RiftTest` extension, imposter injection |
 | `rift-java-jackson` | 17+ | optional POJO body codec |
+| `rift-java-spring` | 17+ | Spring Boot test integration: `@EnableRift`, `@ConfigureImposter`, `@InjectImposter`/`@InjectRift`. Spring is `provided`. |
 
 One client, three transports — embedded (in-process, no Docker, OS-assigned ports),
 connect (any running Rift admin endpoint), spawn (managed `rift` binary). Full feature
