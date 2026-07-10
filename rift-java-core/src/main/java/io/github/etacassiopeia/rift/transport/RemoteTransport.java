@@ -123,7 +123,9 @@ public final class RemoteTransport implements RiftTransport {
 
     @Override
     public void addStub(int port, JsonValue stub) {
-        executeVoid("POST", "/imposters/" + port + "/stubs", stub.toJson(), OptionalInt.of(port));
+        // POST /imposters/{port}/stubs expects a {"stub":{...}} envelope; a bare stub is rejected (400).
+        JsonValue body = JsonObject.builder().put("stub", stub).build();
+        executeVoid("POST", "/imposters/" + port + "/stubs", body.toJson(), OptionalInt.of(port));
     }
 
     @Override
