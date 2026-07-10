@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.etacassiopeia</groupId>
+    <artifactId>rift-java-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>rift-java-examples</artifactId>
+  <packaging>pom</packaging>
+  <name>rift-java-examples (parent)</name>
+  <description>Runnable parity samples over the rift-java embedded engine + intercept API.</description>
+  <url>https://github.com/EtaCassiopeia/rift-java</url>
+
+  <properties>
+    <!-- Same rationale as rift-java-embedded: these samples showcase the embedded engine and
+         intercept API, which need stable java.lang.foreign (JDK 22+). Reactor-activated by the
+         `embedded` profile alongside rift-java-embedded itself. -->
+    <maven.compiler.release>22</maven.compiler.release>
+    <!-- Showcase code, not a published artifact: never deploy/publish these modules. -->
+    <maven.deploy.skip>true</maven.deploy.skip>
+    <!-- Path to a librift_ffi cdylib; the mains (and, optionally, tests that exercise them) run
+         against it and skip/no-op when unset. Override with -Drift.ffi.lib=/path/to/librift_ffi.<ext>. -->
+    <rift.ffi.lib></rift.ffi.lib>
+  </properties>
+
+  <modules>
+    <module>optimizely-datafile</module>
+    <module>proxy-record-replay</module>
+  </modules>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- FFM downcalls are restricted methods; grant native access to silence the enforced
+               warning (mirrors rift-java-embedded/pom.xml). -->
+          <argLine>--enable-native-access=ALL-UNNAMED</argLine>
+          <systemPropertyVariables>
+            <rift.ffi.lib>${rift.ffi.lib}</rift.ffi.lib>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

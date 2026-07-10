@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.etacassiopeia</groupId>
+    <artifactId>rift-java-examples</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>rift-java-example-optimizely-datafile</artifactId>
+  <name>rift-java-example-optimizely-datafile</name>
+  <description>
+    Parity sample: an Intercept "serve" rule answers real HTTPS traffic to a CDN host with a
+    locally-served feature-flag datafile, so no real network call ever leaves the JVM.
+  </description>
+  <url>https://github.com/EtaCassiopeia/rift-java</url>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.etacassiopeia</groupId>
+      <artifactId>rift-java-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.etacassiopeia</groupId>
+      <artifactId>rift-java-embedded</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

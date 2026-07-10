@@ -1,0 +1,149 @@
+# JUnit 5 integration (`rift-java-junit5`)
+
+`@RiftTest` starts one `Rift` engine per test class, creates any `@RiftImposter`-declared
+imposters against it, and injects `@InjectRift`/`@InjectImposter` fields and parameters. It's a
+plain `ExtendWith(RiftTestExtension.class)` meta-annotation — no base class required.
+
+```java
+import io.github.etacassiopeia.rift.Imposter;
+import io.github.etacassiopeia.rift.dsl.ImposterSpec;
+import io.github.etacassiopeia.rift.junit5.*;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+
+@RiftTest
+class UserClientTest {
+
+    @RiftImposter
+    static ImposterSpec usersSpec = imposter("users").record()
+            .stub(onGet("/api/users/1").willReturn(okJson("{\"id\":1}")));
+
+    @InjectImposter("users")
+    Imposter users;
+
+    @Test
+    void fetchesUser(@InjectRift Rift rift) {
+        // point your SUT at users.uri(), then:
+        users.verify(onGet("/api/users/1"), times(1));
+    }
+}
+```
+
+## `@RiftTest`
+
+| Attribute | Default | Meaning |
+|---|---|---|
+| `transport()` | `Transport.AUTO` | How the engine is obtained — see below. |
+| `adminUri()` | `""` | Admin API URI for `Transport.CONNECT` (and `AUTO`, once set). Supports a `${property}` placeholder resolved against a JVM system property of the same name. |
+| `reset()` | `Reset.PER_TEST` | When configured imposters are reset during the class run — see the table below. |
+
+`Transport` values:
+
+- **`AUTO`** — prefers an embedded (in-process FFM) engine when `rift-java-embedded`/the native
+  library is available, otherwise spawns and manages a `rift` binary for the class lifetime.
+- **`CONNECT`** — connects to an already-running admin API at `adminUri()`. Requires a non-blank
+  resolved `adminUri`; throws `IllegalStateException` otherwise.
+- **`SPAWN`** — always spawns and manages a `rift` binary for the class lifetime.
+- **`EMBEDDED`** — always runs the engine in-process (requires JDK 22+ and `rift-java-embedded`).
+
+The `${property}` placeholder is useful when the admin URI is only known at runtime — e.g. a
+`@BeforeAll`/static initializer that starts a fake or real admin server and publishes its port:
+
+```java
+@RiftTest(transport = Transport.CONNECT, adminUri = "${my.admin.uri}")
+class SomeTest {
+    static { System.setProperty("my.admin.uri", startFakeAdmin().toString()); }
+}
+```
+
+(JUnit only guarantees a test class's static initializer has run once the class is loaded, which
+`RiftTestExtension` forces before resolving `adminUri()`.)
+
+## `@RiftImposter` static specs
+
+`@RiftImposter` marks a `static ImposterSpec` field; `RiftTestExtension` builds and creates one
+imposter per such field before any test method runs, keyed by the spec's own declared name (the
+name passed to `RiftDsl.imposter(String)`, read client-side — no engine round-trip required to
+echo it back). Declaring two fields with the same name is a class-level configuration error
+(`IllegalStateException` at `beforeAll`), as is a null or unnamed spec.
+
+```java
+@RiftImposter
+static ImposterSpec usersSpec = imposter("users").record()
+        .stub(onGet("/api/users/1").willReturn(okJson("{\"id\":1}")));
+
+@RiftImposter
+static ImposterSpec paymentsSpec = imposter("payments").record();
+```
+
+## `@InjectImposter` / `@InjectRift`
+
+Both work on instance fields and on test-method parameters:
+
+```java
+@InjectImposter("users") Imposter users;   // field
+
+@Test
+void aTest(@InjectRift Rift rift, @InjectImposter("payments") Imposter payments) {
+    ...
+}
+```
+
+`@InjectImposter("name")` looks up the imposter created from the `@RiftImposter` field with that
+declared name; an unknown name fails parameter/field resolution. `@InjectRift` hands back the
+class's single shared `Rift` client.
+
+## Reset semantics
+
+| `Reset` value | When it runs | What it clears |
+|---|---|---|
+| `PER_TEST` (default) | Before every test method | Recorded requests, scenario state, and proxy responses on every `@RiftImposter`-configured imposter. |
+| `PER_CLASS` | Once, before the first test method | Same as above, but only once for the whole class. |
+| `NONE` | Never (automatically) | Nothing — the test manages imposter state itself, e.g. across intentionally stateful test methods. |
+
+Reset only touches imposters declared via `@RiftImposter`; imposters created ad hoc inside a test
+method (`rift.create(...)`) are the test's own responsibility to clean up.
+
+```java
+@RiftTest(reset = Reset.PER_CLASS)
+class SharedStateTest {
+    @RiftImposter
+    static ImposterSpec usersSpec = imposter("users").record();
+
+    @InjectImposter("users") Imposter users;
+
+    @Test
+    @Order(1)
+    void firstCallIsRecorded() {
+        // ... drive the SUT ...
+        users.verify(onGet("/api/users/1"), times(1));
+    }
+
+    @Test
+    @Order(2)
+    void recordingPersistsAcrossMethods() {
+        // still 1, not reset between methods under PER_CLASS
+        users.verify(onGet("/api/users/1"), times(1));
+    }
+}
+```
+
+## Parallel execution
+
+`RiftTestExtension` starts exactly one engine per test class (in `beforeAll`) and tears it down
+in `afterAll`. That makes test **classes** safe to run in parallel with each other under JUnit
+5's parallel execution — each gets its own engine, its own imposters, and its own admin
+connection, with no shared mutable state between classes. Test **methods within the same class**
+share that one engine and its `@RiftImposter` imposters, so:
+
+- Don't enable method-level parallelism within a `@RiftTest` class unless your test methods only
+  read/verify disjoint imposters or paths — concurrent methods hitting the same imposter's
+  recorded requests will race against each other's traffic and against `PER_TEST` resets.
+- Prefer class-level parallelism (JUnit 5's default granularity) and keep `Reset.PER_TEST` (the
+  default) so each method starts from a clean slate.
+
+## Follow-up (not yet available)
+
+A Tier-2 `@RegisterExtension`-based builder API (for cases that need to configure the extension
+programmatically rather than via annotation attributes) and a `dumpRecordedOnFailure` diagnostic
+hook are tracked as a follow-up — see
+[EtaCassiopeia/rift-java#45](https://github.com/EtaCassiopeia/rift-java/issues/45).
