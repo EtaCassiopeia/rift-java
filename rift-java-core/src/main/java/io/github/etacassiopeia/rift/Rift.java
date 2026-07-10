@@ -4,16 +4,23 @@ import io.github.etacassiopeia.rift.dsl.ImposterSpec;
 import io.github.etacassiopeia.rift.error.EngineUnavailable;
 import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.ImposterDefinition;
+import io.github.etacassiopeia.rift.spawn.BinaryResolver;
+import io.github.etacassiopeia.rift.spawn.RiftProcess;
+import io.github.etacassiopeia.rift.transport.RemoteTransport;
+import io.github.etacassiopeia.rift.transport.RiftTransport;
 
 import java.net.URI;
+import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
 /**
  * A client for a running rift engine's admin API. {@link #connect(URI)}/{@link
- * #connect(ConnectOptions)} is the only transport implemented so far — remote HTTP against an
- * already-running engine. {@link #spawn()} (issue #5) and {@link #embedded()} (issue #10,
- * requires the {@code rift-java-embedded} module) are reserved but not yet implemented.
+ * #connect(ConnectOptions)} talks to an already-running engine; {@link #spawn()}/{@link
+ * #spawn(SpawnOptions)} additionally launches and owns the engine process's lifecycle. {@link
+ * #embedded()} (issue #10, requires the {@code rift-java-embedded} module) is reserved but not yet
+ * implemented.
  */
 public interface Rift extends AutoCloseable {
 
@@ -26,11 +33,23 @@ public interface Rift extends AutoCloseable {
     }
 
     static Rift spawn() {
-        throw new UnsupportedOperationException("spawn transport arrives in issue #5");
+        return spawn(SpawnOptions.builder().build());
     }
 
+    /**
+     * Resolves (downloading if necessary) and launches a {@code rift} engine process, then returns
+     * a client bound to it. The returned {@link Rift#close()} also stops the launched process. The
+     * process's own version is pinned by {@link SpawnOptions#version()}, so no version preflight
+     * runs against it.
+     */
     static Rift spawn(SpawnOptions options) {
-        throw new UnsupportedOperationException("spawn transport arrives in issue #5");
+        Path binary = BinaryResolver.resolve(options);
+        RiftProcess process = RiftProcess.launch(binary, options);
+        RiftTransport transport = new RemoteTransport(process.adminUri(), Optional.empty(), Duration.ofSeconds(30));
+        ConnectOptions connectOptions = ConnectOptions.builder(process.adminUri())
+                .versionCheck(VersionCheck.OFF)
+                .build();
+        return RiftImpl.spawned(transport, connectOptions, () -> process.stop(options.shutdownTimeout()));
     }
 
     static Rift embedded() {
