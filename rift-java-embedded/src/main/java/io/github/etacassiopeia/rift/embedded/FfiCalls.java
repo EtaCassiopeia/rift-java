@@ -170,6 +170,45 @@ final class FfiCalls {
         }
     }
 
+    JsonValue startIntercept(JsonValue options) {
+        ensureLive();
+        try (Arena args = Arena.ofConfined()) {
+            return readJsonAndFree(ffi.startIntercept(handle, FfmCompat.allocateCString(args, options.toJson())));
+        }
+    }
+
+    void interceptAddRules(JsonValue rules) {
+        ensureLive();
+        try (Arena args = Arena.ofConfined()) {
+            if (ffi.interceptAddRules(handle, FfmCompat.allocateCString(args, rules.toJson())) != 0) {
+                throw engineError();
+            }
+        }
+    }
+
+    JsonValue interceptListRules() {
+        ensureLive();
+        return readJsonAndFree(ffi.interceptListRules(handle));
+    }
+
+    void interceptClearRules() {
+        ensureLive();
+        if (ffi.interceptClearRules(handle) != 0) {
+            throw engineError();
+        }
+    }
+
+    String interceptCaPem() {
+        ensureLive();
+        MemorySegment seg = ffi.interceptCaPem(handle);
+        if (RiftFfi.isNull(seg)) {
+            throw engineError();
+        }
+        String pem = RiftFfi.readString(seg);
+        ffi.free(seg);
+        return pem;
+    }
+
     void stop() {
         if (stopped) {
             return;

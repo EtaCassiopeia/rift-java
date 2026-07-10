@@ -102,6 +102,19 @@ public interface Rift extends AutoCloseable {
 
     URI adminUri();
 
+    /** Starts an intercept (TLS-MITM) listener with default options. See {@link #intercept(InterceptOptions)}. */
+    default Intercept intercept() {
+        return intercept(InterceptOptions.builder().build());
+    }
+
+    /**
+     * Starts an intercept (TLS-MITM) listener on this engine. At most one per engine: a second call
+     * on this {@code Rift} throws {@link IllegalStateException}. (The engine also rejects a second
+     * listener — surfaced as an engine error — so a separate {@code Rift} bound to the same engine
+     * cannot start one either.) A call that fails to start leaves intercept available to retry.
+     */
+    Intercept intercept(InterceptOptions options);
+
     RiftAsync async();
 
     @Override

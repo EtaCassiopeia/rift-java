@@ -183,6 +183,33 @@ public final class EmbeddedTransport implements RiftTransport {
         return calls.buildInfo();
     }
 
+    // Intercept is driven directly over the C-ABI (no admin loopback needed).
+
+    @Override
+    public JsonValue startIntercept(JsonValue options) {
+        return calls.startIntercept(options);
+    }
+
+    @Override
+    public void interceptAddRules(JsonValue rules) {
+        calls.interceptAddRules(rules);
+    }
+
+    @Override
+    public JsonValue interceptListRules() {
+        return calls.interceptListRules();
+    }
+
+    @Override
+    public void interceptClearRules() {
+        calls.interceptClearRules();
+    }
+
+    @Override
+    public String interceptCaPem() {
+        return calls.interceptCaPem();
+    }
+
     @Override
     public URI adminUri() {
         return admin().adminUri();

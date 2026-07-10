@@ -19,6 +19,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 final class RiftImpl implements Rift {
 
@@ -30,6 +31,7 @@ final class RiftImpl implements Rift {
     private final RiftTransport transport;
     private final ConnectOptions options;
     private final Runnable onClose;
+    private final AtomicBoolean interceptStarted = new AtomicBoolean(false);
 
     private RiftImpl(RiftTransport transport, ConnectOptions options, Runnable onClose) {
         this.transport = transport;
@@ -217,6 +219,24 @@ final class RiftImpl implements Rift {
     @Override
     public URI adminUri() {
         return transport.adminUri();
+    }
+
+    @Override
+    public Intercept intercept(InterceptOptions options) {
+        // Checked (and flipped) before touching the transport at all: a rejected second call must
+        // never start a second listener even transiently.
+        if (!interceptStarted.compareAndSet(false, true)) {
+            throw new IllegalStateException("intercept already started for this engine");
+        }
+        try {
+            JsonValue response = transport.startIntercept(options.toJson());
+            return new InterceptImpl(transport, response);
+        } catch (RuntimeException e) {
+            // The listener didn't actually start — reset so a genuine failure is retryable, while a
+            // concurrent/second call was still blocked by the CAS above.
+            interceptStarted.set(false);
+            throw e;
+        }
     }
 
     @Override
