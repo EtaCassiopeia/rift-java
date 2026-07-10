@@ -29,10 +29,12 @@ final class RiftImpl implements Rift {
 
     private final RiftTransport transport;
     private final ConnectOptions options;
+    private final Runnable onClose;
 
-    private RiftImpl(RiftTransport transport, ConnectOptions options) {
+    private RiftImpl(RiftTransport transport, ConnectOptions options, Runnable onClose) {
         this.transport = transport;
         this.options = options;
+        this.onClose = onClose;
     }
 
     static Rift connect(ConnectOptions options) {
@@ -40,7 +42,17 @@ final class RiftImpl implements Rift {
         if (options.versionCheck() != VersionCheck.OFF) {
             preflight(transport, options.versionCheck());
         }
-        return new RiftImpl(transport, options);
+        return new RiftImpl(transport, options, () -> { });
+    }
+
+    /**
+     * Wraps an already-running transport (e.g. a freshly spawned process whose engine version is
+     * pinned by the SDK, so no preflight is needed) with an extra {@code onClose} action run after
+     * the transport itself is closed — {@link Rift#spawn(SpawnOptions)} uses this to also stop the
+     * process it launched.
+     */
+    static Rift spawned(RiftTransport transport, ConnectOptions options, Runnable onClose) {
+        return new RiftImpl(transport, options, onClose);
     }
 
     private static void preflight(RiftTransport transport, VersionCheck mode) {
@@ -181,7 +193,13 @@ final class RiftImpl implements Rift {
 
     @Override
     public void close() {
-        transport.close();
+        // onClose (which stops a spawned process) must run even if the transport close ever throws,
+        // so the managed engine is never left running past the Rift handle that owns it.
+        try {
+            transport.close();
+        } finally {
+            onClose.run();
+        }
     }
 
     private static int extractPort(JsonValue value) {
