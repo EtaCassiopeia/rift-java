@@ -1,5 +1,8 @@
 package io.github.etacassiopeia.rift;
 
+import io.github.etacassiopeia.rift.dsl.ProxySpec;
+import io.github.etacassiopeia.rift.dsl.RequestField;
+import io.github.etacassiopeia.rift.dsl.RiftDsl;
 import io.github.etacassiopeia.rift.dsl.StubSpec;
 import io.github.etacassiopeia.rift.error.InvalidDefinition;
 import io.github.etacassiopeia.rift.json.JsonArray;
@@ -61,6 +64,45 @@ final class ImposterImpl implements Imposter {
         transport.addStub(port, stub);
         int index = definition().stubs().size() - 1;
         return new StubRefImpl(port, transport, new StubAddress.ByIndex(index));
+    }
+
+    @Override
+    public Recording startRecording(String originUrl) {
+        return startRecording(originUrl, RecordSpec.builder().build());
+    }
+
+    @Override
+    public Recording startRecording(String originUrl, RecordSpec spec) {
+        JsonValue proxyStub = buildProxyStub(originUrl, spec);
+        List<JsonValue> existing = definition().stubs().stream()
+                .map(s -> (JsonValue) JsonValue.parse(s.toJson())).toList();
+        List<JsonValue> reordered = new ArrayList<>();
+        // ONCE/TRANSPARENT must match before any existing stub could shadow the proxy — prepend;
+        // ALWAYS records new entries as it goes, so appending keeps existing stubs first.
+        if (spec.mode() == RecordMode.ALWAYS) {
+            reordered.addAll(existing);
+            reordered.add(proxyStub);
+        } else {
+            reordered.add(proxyStub);
+            reordered.addAll(existing);
+        }
+        transport.replaceStubs(port, new JsonArray(reordered));
+        return new RecordingImpl(port, transport, originUrl, spec);
+    }
+
+    private static JsonValue buildProxyStub(String originUrl, RecordSpec spec) {
+        ProxySpec proxy = RiftDsl.proxyTo(originUrl);
+        proxy = switch (spec.mode()) {
+            case ONCE -> proxy.proxyOnce();
+            case ALWAYS -> proxy.proxyAlways();
+            case TRANSPARENT -> proxy.proxyTransparent();
+        };
+        proxy = proxy.generateBy(spec.generators().toArray(new RequestField[0]));
+        if (spec.addWaitBehavior()) {
+            proxy = proxy.addWaitBehavior();
+        }
+        Stub stub = RiftDsl.onRequest().willReturn(proxy).build();
+        return JsonValue.parse(stub.toJson());
     }
 
     @Override
