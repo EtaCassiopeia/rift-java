@@ -233,9 +233,9 @@ final class RiftFfi {
         return (int) invoke(interceptExportTruststore, handle, format, password, outPath);
     }
 
-    /** Reads a returned C string, reinterpreting the zero-length ADDRESS segment before reading it. */
+    /** Reads a returned C string. Delegates to {@link FfmCompat} for the two-JDK method rename. */
     static String readString(MemorySegment segment) {
-        return segment.reinterpret(Long.MAX_VALUE).getString(0);
+        return FfmCompat.readCString(segment);
     }
 
     static boolean isNull(MemorySegment segment) {

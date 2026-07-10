@@ -17,8 +17,12 @@
 
   <properties>
     <!-- The JDK 21 variant is reactor-activated by the `embedded-jdk21` profile (JDK 21 exactly).
-         Preview FFM flags are switched on in #11 when the binding is introduced. -->
+         Built from rift-java-embedded's main/test sources (added below) under release 21 with
+         preview features enabled; FfmCompat resolves the two renamed FFM methods reflectively. -->
     <maven.compiler.release>21</maven.compiler.release>
+    <!-- Path to a librift_ffi cdylib; the FFM integration tests run against it and skip when unset.
+         Override with -Drift.ffi.lib=/path/to/librift_ffi.<ext>. -->
+    <rift.ffi.lib></rift.ffi.lib>
   </properties>
 
   <dependencies>
@@ -32,4 +36,74 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>${build-helper-maven-plugin.version}</version>
+        <executions>
+          <execution>
+            <id>add-source</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${project.basedir}/../rift-java-embedded/src/main/java</source>
+              </sources>
+            </configuration>
+          </execution>
+          <execution>
+            <id>add-test-source</id>
+            <phase>generate-test-sources</phase>
+            <goals>
+              <goal>add-test-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${project.basedir}/../rift-java-embedded/src/test/java</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <release>21</release>
+          <compilerArgs>
+            <arg>--enable-preview</arg>
+          </compilerArgs>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- Preview FFM class files require the enable-preview flag at runtime too; FFM
+               downcalls are restricted methods, so also grant native access to silence the
+               enforced warning. -->
+          <argLine>--enable-preview --enable-native-access=ALL-UNNAMED</argLine>
+          <systemPropertyVariables>
+            <rift.ffi.lib>${rift.ffi.lib}</rift.ffi.lib>
+          </systemPropertyVariables>
+          <!-- The real-FFM integration test is named *IT (its own convention here, not Failsafe's)
+               and would otherwise be skipped by Surefire's default *Test(s)/TestCase includes. -->
+          <includes>
+            <include>**/*Test.java</include>
+            <include>**/*IT.java</include>
+          </includes>
+          <excludes>
+            <!-- Asserts JDK >= 22; this module runs on JDK 21. EmbeddedJdk21RuntimeTest below
+                 covers the equivalent >= 21 assertion for this module. -->
+            <exclude>**/EmbeddedRuntimeTest.java</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>
