@@ -7,9 +7,14 @@ import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.Stub;
 import io.github.etacassiopeia.rift.transport.RiftTransport;
 import io.github.etacassiopeia.rift.transport.StubAddress;
+import io.github.etacassiopeia.rift.verify.PredicateEvaluator;
+import io.github.etacassiopeia.rift.verify.RequestMatch;
+import io.github.etacassiopeia.rift.verify.VerificationException;
+import io.github.etacassiopeia.rift.verify.VerificationTimes;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 final class SpaceImpl implements Space {
 
@@ -49,6 +54,28 @@ final class SpaceImpl implements Space {
         List<RecordedRequest> out = new ArrayList<>();
         collectRecorded(result, out);
         return List.copyOf(out);
+    }
+
+    @Override
+    public List<RecordedRequest> recorded(RequestMatch match) {
+        return recorded().stream().filter(r -> PredicateEvaluator.matches(r, match.predicates())).toList();
+    }
+
+    @Override
+    public void verify(RequestMatch match) {
+        verify(match, VerificationTimes.atLeast(1));
+    }
+
+    @Override
+    public void verify(RequestMatch match, VerificationTimes times) {
+        // Unlike Imposter.verify, a space is not itself an imposter definition, so there is no
+        // recordRequests() flag to check here — recording is configured on the owning imposter.
+        PredicateEvaluator.requireNoInject(match.predicates());
+        List<RecordedRequest> all = recorded();
+        int count = (int) all.stream().filter(r -> PredicateEvaluator.matches(r, match.predicates())).count();
+        if (!times.matches(count)) {
+            throw new VerificationException(port, Optional.empty(), match, times, count, all);
+        }
     }
 
     @Override

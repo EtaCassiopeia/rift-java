@@ -1,17 +1,18 @@
 package io.github.etacassiopeia.rift;
 
 import io.github.etacassiopeia.rift.dsl.StubSpec;
+import io.github.etacassiopeia.rift.error.InvalidDefinition;
 import io.github.etacassiopeia.rift.json.JsonArray;
 import io.github.etacassiopeia.rift.json.JsonObject;
-import io.github.etacassiopeia.rift.json.JsonString;
 import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.ImposterDefinition;
-import io.github.etacassiopeia.rift.model.Predicate;
-import io.github.etacassiopeia.rift.model.PredicateOperation;
 import io.github.etacassiopeia.rift.model.Stub;
 import io.github.etacassiopeia.rift.transport.RiftTransport;
 import io.github.etacassiopeia.rift.transport.StubAddress;
+import io.github.etacassiopeia.rift.verify.PredicateEvaluator;
 import io.github.etacassiopeia.rift.verify.RequestMatch;
+import io.github.etacassiopeia.rift.verify.VerificationException;
+import io.github.etacassiopeia.rift.verify.VerificationTimes;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -96,7 +97,7 @@ final class ImposterImpl implements Imposter {
 
     @Override
     public List<RecordedRequest> recorded(RequestMatch match) {
-        return recorded().stream().filter(r -> matchesAll(r, match.predicates())).toList();
+        return recorded().stream().filter(r -> PredicateEvaluator.matches(r, match.predicates())).toList();
     }
 
     @Override
@@ -139,38 +140,36 @@ final class ImposterImpl implements Imposter {
         transport.deleteImposter(port);
     }
 
-    // Full predicate evaluation (PredicateEvaluator) is out of scope here — issue #6. This covers
-    // only the common case of a flat `equals` predicate on method/path, which is what every stub
-    // seeded by RiftDsl.onGet/onPost/... carries; any other operation is treated as satisfied
-    // (i.e. not filtered on), so callers get a superset rather than a silently wrong subset.
-    private static boolean matchesAll(RecordedRequest request, List<Predicate> predicates) {
-        for (Predicate predicate : predicates) {
-            if (!matches(request, predicate)) {
-                return false;
-            }
-        }
-        return true;
+    @Override
+    public void verify(RequestMatch match) {
+        verify(match, VerificationTimes.atLeast(1));
     }
 
-    private static boolean matches(RecordedRequest request, Predicate predicate) {
-        if (!(predicate.operation() instanceof PredicateOperation.Equals equals)) {
-            return true;
+    @Override
+    public void verify(RequestMatch match, VerificationTimes times) {
+        if (!definition().recordRequests()) {
+            throw new InvalidDefinition("imposter :" + port + " does not record requests — add .record()");
         }
-        for (var field : equals.fields().entrySet()) {
-            if (field.getKey().equals("method") && !fieldEquals(field.getValue(), request.method(), true)) {
-                return false;
-            }
-            if (field.getKey().equals("path") && !fieldEquals(field.getValue(), request.path(), false)) {
-                return false;
-            }
+        // Reject an inject predicate up front: PredicateEvaluator.matches only reaches it once every
+        // preceding AND-clause has matched, so relying on the per-request filter below alone could
+        // silently skip the rejection for a request set where an earlier clause never matches.
+        PredicateEvaluator.requireNoInject(match.predicates());
+        List<RecordedRequest> all = recorded();
+        int count = (int) all.stream().filter(r -> PredicateEvaluator.matches(r, match.predicates())).count();
+        if (!times.matches(count)) {
+            throw new VerificationException(port, name(), match, times, count, all);
         }
-        return true;
     }
 
-    private static boolean fieldEquals(JsonValue expected, String actual, boolean ignoreCase) {
-        if (!(expected instanceof JsonString s)) {
-            return true;
+    @Override
+    public void verifyNoInteractions() {
+        if (!definition().recordRequests()) {
+            throw new InvalidDefinition("imposter :" + port + " does not record requests — add .record()");
         }
-        return ignoreCase ? s.value().equalsIgnoreCase(actual) : s.value().equals(actual);
+        List<RecordedRequest> all = recorded();
+        if (!all.isEmpty()) {
+            RequestMatch noPredicates = List::of;
+            throw new VerificationException(port, name(), noPredicates, VerificationTimes.never(), all.size(), all);
+        }
     }
 }

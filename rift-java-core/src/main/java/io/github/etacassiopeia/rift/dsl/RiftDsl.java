@@ -7,6 +7,7 @@ import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.Predicate;
 import io.github.etacassiopeia.rift.model.PredicateOperation;
 import io.github.etacassiopeia.rift.model.PredicateParameters;
+import io.github.etacassiopeia.rift.verify.VerificationTimes;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -372,6 +373,40 @@ public final class RiftDsl {
     /** Starts building a Redis-backed flow-state configuration against {@code url}. */
     public static FlowStateSpec redisFlowState(String url) {
         return FlowStateSpec.redis(url);
+    }
+
+    // ------------------------------------------------------------------
+    // Verification times
+    // ------------------------------------------------------------------
+
+    /** Expect exactly {@code n} matching requests. */
+    public static VerificationTimes times(int n) {
+        return VerificationTimes.times(n);
+    }
+
+    /** Alias for {@link #times(int)}. */
+    public static VerificationTimes exactly(int n) {
+        return VerificationTimes.exactly(n);
+    }
+
+    /** Expect at least {@code n} matching requests. */
+    public static VerificationTimes atLeast(int n) {
+        return VerificationTimes.atLeast(n);
+    }
+
+    /** Expect at most {@code n} matching requests. */
+    public static VerificationTimes atMost(int n) {
+        return VerificationTimes.atMost(n);
+    }
+
+    /** Expect between {@code min} and {@code max} matching requests, inclusive. */
+    public static VerificationTimes between(int min, int max) {
+        return VerificationTimes.between(min, max);
+    }
+
+    /** Expect zero matching requests. */
+    public static VerificationTimes never() {
+        return VerificationTimes.never();
     }
 
     // ------------------------------------------------------------------
