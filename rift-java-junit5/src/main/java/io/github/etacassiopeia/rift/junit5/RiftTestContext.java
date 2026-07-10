@@ -3,7 +3,10 @@ package io.github.etacassiopeia.rift.junit5;
 import io.github.etacassiopeia.rift.Imposter;
 import io.github.etacassiopeia.rift.Rift;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 /**
  * The per-class infrastructure {@link RiftTestExtension} builds: the started {@link Rift} engine,
@@ -15,16 +18,29 @@ final class RiftTestContext {
     private final Rift rift;
     private final Map<String, Imposter> impostersByName;
     private final Reset reset;
+    private final boolean dumpRecordedOnFailure;
     private volatile boolean closed;
 
-    RiftTestContext(Rift rift, Map<String, Imposter> impostersByName, Reset reset) {
+    RiftTestContext(Rift rift, Map<String, Imposter> impostersByName, Reset reset, boolean dumpRecordedOnFailure) {
         this.rift = rift;
-        this.impostersByName = Map.copyOf(impostersByName);
+        // Preserve declaration order (unlike Map.copyOf) so forEachImposter — and thus the failure
+        // dump — is deterministic across runs.
+        this.impostersByName = Collections.unmodifiableMap(new LinkedHashMap<>(impostersByName));
         this.reset = reset;
+        this.dumpRecordedOnFailure = dumpRecordedOnFailure;
     }
 
     Rift rift() {
         return rift;
+    }
+
+    boolean dumpRecordedOnFailure() {
+        return dumpRecordedOnFailure;
+    }
+
+    /** Applies {@code action} to each configured imposter (name → imposter), in declaration order. */
+    void forEachImposter(BiConsumer<String, Imposter> action) {
+        impostersByName.forEach(action);
     }
 
     Imposter imposter(String name) {

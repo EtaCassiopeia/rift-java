@@ -35,6 +35,7 @@ class UserClientTest {
 | `transport()` | `Transport.AUTO` | How the engine is obtained — see below. |
 | `adminUri()` | `""` | Admin API URI for `Transport.CONNECT` (and `AUTO`, once set). Supports a `${property}` placeholder resolved against a JVM system property of the same name. |
 | `reset()` | `Reset.PER_TEST` | When configured imposters are reset during the class run — see the table below. |
+| `dumpRecordedOnFailure()` | `false` | On a failing test, publish each imposter's recorded requests to the JUnit report — see [Failure diagnostics](#failure-diagnostics-dumprecordedonfailure). |
 
 `Transport` values:
 
@@ -141,9 +142,54 @@ share that one engine and its `@RiftImposter` imposters, so:
 - Prefer class-level parallelism (JUnit 5's default granularity) and keep `Reset.PER_TEST` (the
   default) so each method starts from a clean slate.
 
-## Follow-up (not yet available)
+## Tier-2: programmatic `@RegisterExtension` builder
 
-A Tier-2 `@RegisterExtension`-based builder API (for cases that need to configure the extension
-programmatically rather than via annotation attributes) and a `dumpRecordedOnFailure` diagnostic
-hook are tracked as a follow-up — see
-[EtaCassiopeia/rift-java#45](https://github.com/EtaCassiopeia/rift-java/issues/45).
+When transport or imposters are computed at runtime (or you want to avoid the class annotation),
+build the extension programmatically and register it as a `static` field with
+`@RegisterExtension`. It supports exactly the same field/parameter injection and reset semantics
+as the annotation:
+
+```java
+class UserClientTest {
+    static final FakeAdmin admin = FakeAdmin.start();
+
+    @RegisterExtension
+    static final RiftTestExtension rift = RiftTestExtension.newInstance()
+            .transport(Transport.CONNECT)
+            .adminUri(admin.uri().toString())      // computed at runtime
+            .imposter(imposter("users").record())  // repeatable; one per call
+            .reset(Reset.PER_TEST)
+            .dumpRecordedOnFailure(true)
+            .build();
+
+    @Test
+    void fetchesUser(@InjectRift Rift r, @InjectImposter("users") Imposter users) { ... }
+}
+```
+
+`newInstance()` defaults match the annotation (`Transport.AUTO`, `Reset.PER_TEST`,
+`dumpRecordedOnFailure=false`). `adminUri(...)` also honours the `${property}` placeholder.
+
+## Failure diagnostics (`dumpRecordedOnFailure`)
+
+`@RiftTest(dumpRecordedOnFailure = true)` (or `.dumpRecordedOnFailure(true)` on the builder)
+makes a **failing** test publish each imposter's recorded requests to the JUnit report as an
+entry keyed `rift.recorded.<name>`, one `METHOD path` per line, capped at 20 requests per
+imposter (with a `… N more` note when truncated). Nothing is published for a passing test or when
+the flag is off. It's a fast way to see what traffic actually reached a mock when a test fails:
+
+```java
+@RiftTest(dumpRecordedOnFailure = true)
+class OrderFlowTest {
+    @RiftImposter static ImposterSpec users = imposter("users").record();
+
+    @Test
+    void placesOrder(@InjectImposter("users") Imposter users) {
+        // ... drive the SUT ...
+        assertEquals(200, response.status());   // on failure, the report shows what hit `users`
+    }
+}
+```
+
+Most IDEs and the Surefire/Gradle reports surface report entries next to the failed test; only
+imposters that actually recorded a request produce an entry.

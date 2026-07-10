@@ -32,4 +32,11 @@ public @interface RiftTest {
 
     /** When configured imposters are reset during a test class run. */
     Reset reset() default Reset.PER_TEST;
+
+    /**
+     * When {@code true}, a failing test publishes each imposter's recorded requests to the JUnit
+     * report as an entry keyed {@code rift.recorded.<name>} (capped at 20 requests per imposter),
+     * to aid debugging a test that hit a mock. Off by default.
+     */
+    boolean dumpRecordedOnFailure() default false;
 }
