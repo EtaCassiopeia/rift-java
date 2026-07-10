@@ -238,6 +238,51 @@ public final class RemoteTransport implements RiftTransport {
         return executeJson("GET", "/config", null, OptionalInt.empty());
     }
 
+    // ------------------------------------------------------------------
+    // Intercept (TLS-MITM)
+    // ------------------------------------------------------------------
+    //
+    // UNCERTAIN ROUTE: the rift engine's admin API (crates/rift-http-proxy/src/admin_api/
+    // handlers/intercept.rs + router.rs) only ever *manages* an intercept listener that was
+    // already started at process launch via the `--intercept-port` CLI flag — there is no admin
+    // route to start one remotely (route_request only dispatches to intercept::route when an
+    // Option<Arc<InterceptState>> is already Some, and that Some only ever comes from the CLI
+    // wiring in server.rs). "POST /intercept" below is therefore a best guess at what such a
+    // route would look like if/when the engine grows one, mirroring the {interceptPort,
+    // interceptUrl} shape rift_start_intercept already returns over FFI; against today's engine
+    // it 404s, surfaced as an ordinary EngineError. The other four routes are confirmed directly
+    // from intercept.rs's route() match: POST/GET/DELETE /intercept/rules, GET /intercept/ca.pem.
+
+    @Override
+    public JsonValue startIntercept(JsonValue options) {
+        return executeJson("POST", "/intercept", options.toJson(), OptionalInt.empty());
+    }
+
+    @Override
+    public void interceptAddRules(JsonValue rules) {
+        executeVoid("POST", "/intercept/rules", rules.toJson(), OptionalInt.empty());
+    }
+
+    @Override
+    public JsonValue interceptListRules() {
+        return executeJson("GET", "/intercept/rules", null, OptionalInt.empty());
+    }
+
+    @Override
+    public void interceptClearRules() {
+        executeVoid("DELETE", "/intercept/rules", null, OptionalInt.empty());
+    }
+
+    @Override
+    public String interceptCaPem() {
+        // application/x-pem-file, not JSON — read the body as raw text rather than parsing it.
+        HttpResponse<String> response = send("GET", "/intercept/ca.pem", null);
+        if (isSuccess(response.statusCode())) {
+            return response.body();
+        }
+        throw mapError(response, OptionalInt.empty());
+    }
+
     @Override
     public void close() {
         // java.net.http.HttpClient has no close() at the Java 17 API level (added in 21); marking

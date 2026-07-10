@@ -73,6 +73,25 @@ public interface RiftTransport extends AutoCloseable {
 
     URI adminUri();
 
+    /**
+     * Starts the intercept (TLS-MITM) listener with the given {@code {host,port,caCertPath,
+     * caKeyPath}} options, returning {@code {interceptPort,interceptUrl}}. One intercept per
+     * engine; the caller (see {@code RiftImpl}) enforces that invariant before this is ever
+     * called, so a transport need not guard against a second call itself.
+     */
+    JsonValue startIntercept(JsonValue options);
+
+    /** Adds one ({@code JsonObject}) or many ({@code JsonArray}) intercept rules. */
+    void interceptAddRules(JsonValue rules);
+
+    /** The current intercept rules, as a JSON array. */
+    JsonValue interceptListRules();
+
+    void interceptClearRules();
+
+    /** The intercept CA certificate, PEM-encoded. */
+    String interceptCaPem();
+
     @Override
     void close();
 }
