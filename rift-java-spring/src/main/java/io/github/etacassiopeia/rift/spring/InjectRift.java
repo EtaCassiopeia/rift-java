@@ -6,8 +6,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/** Injects the test context's {@link io.github.etacassiopeia.rift.Rift} into a test field. */
-@Target(ElementType.FIELD)
+/** Injects the test context's {@link io.github.etacassiopeia.rift.Rift} into a test field or method parameter. */
+@Target({ElementType.FIELD, ElementType.PARAMETER})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface InjectRift {
