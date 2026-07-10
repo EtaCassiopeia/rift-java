@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.etacassiopeia</groupId>
+    <artifactId>rift-java-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>rift-java-bom</artifactId>
+  <packaging>pom</packaging>
+  <name>rift-java-bom</name>
+  <description>Bill of materials: one import version-pins every rift-java module and the natives classifier jars.</description>
+  <url>https://github.com/EtaCassiopeia/rift-java</url>
+
+  <!-- Test-scope-only edges purely so Maven's reactor sorter treats this module as depending on its
+       siblings. That makes `mvn -pl rift-java-bom -am ...` also-make them, which the invoker IT below
+       needs: the isolated IT local-repo is seeded via extraArtifacts resolved straight out of THIS
+       reactor session (via Maven's workspace/reactor resolver), with no separate `mvn install` step.
+       These are resolved at build time (the invoker install goal installs them into the staged repo)
+       but never appear on any CONSUMER's classpath: flattenMode=bom (below) strips this whole section
+       from the published pom. NOTE: building this module alone (`mvn -pl rift-java-bom` without -am and
+       without a populated local repo) fails to resolve these — build with -am or after a full install. -->
+  <dependencies>
+    <dependency>
+      <groupId>io.github.etacassiopeia</groupId>
+      <artifactId>rift-java-core</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.github.etacassiopeia</groupId>
+      <artifactId>rift-java-jackson</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.github.etacassiopeia</groupId>
+      <artifactId>rift-java-junit5</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.github.etacassiopeia</groupId>
+      <artifactId>rift-java-spring</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-embedded</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-embedded-jdk21</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-jackson</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-junit5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-spring</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <!-- Bare (classifier-less) coordinate: pins the version for a plain rift-java-natives
+           dependency. dependencyManagement keys on classifier, so the six classifier entries below
+           independently manage the classifier-bearing dependencies. -->
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-natives</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-natives</artifactId>
+        <version>${project.version}</version>
+        <classifier>linux-x86_64</classifier>
+        <type>jar</type>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-natives</artifactId>
+        <version>${project.version}</version>
+        <classifier>linux-aarch64</classifier>
+        <type>jar</type>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-natives</artifactId>
+        <version>${project.version}</version>
+        <classifier>linux-musl-x86_64</classifier>
+        <type>jar</type>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-natives</artifactId>
+        <version>${project.version}</version>
+        <classifier>darwin-x86_64</classifier>
+        <type>jar</type>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-natives</artifactId>
+        <version>${project.version}</version>
+        <classifier>darwin-aarch64</classifier>
+        <type>jar</type>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-natives</artifactId>
+        <version>${project.version}</version>
+        <classifier>windows-x86_64</classifier>
+        <type>jar</type>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <plugins>
+      <plugin>
+        <!-- A BOM must publish a dependencyManagement-only pom: flattenMode=bom strips the
+             <parent>/<build>/<profiles> inherited from rift-java-parent so consumers importing
+             this pom don't inherit build machinery, while keeping dependencyManagement intact. -->
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>flatten-maven-plugin</artifactId>
+        <version>${flatten-maven-plugin.version}</version>
+        <configuration>
+          <flattenMode>bom</flattenMode>
+        </configuration>
+        <executions>
+          <execution>
+            <id>flatten</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>flatten</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>flatten-clean</id>
+            <phase>clean</phase>
+            <goals>
+              <goal>clean</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <!-- Proves consumers can resolve module versions through this BOM alone: src/it stages
+             an isolated local repo containing this pom plus the sibling SNAPSHOT jars (via
+             extraArtifacts, resolved from the reactor build that produced them), then runs the
+             resolve-through-bom consumer project against it. -->
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-invoker-plugin</artifactId>
+        <version>${maven-invoker-plugin.version}</version>
+        <configuration>
+          <projectsDirectory>src/it</projectsDirectory>
+          <cloneProjectsTo>${project.build.directory}/it</cloneProjectsTo>
+          <localRepositoryPath>${project.build.directory}/local-repo</localRepositoryPath>
+          <settingsFile>src/it/settings.xml</settingsFile>
+          <extraArtifacts>
+            <extraArtifact>io.github.etacassiopeia:rift-java-core:${project.version}:jar</extraArtifact>
+            <extraArtifact>io.github.etacassiopeia:rift-java-jackson:${project.version}:jar</extraArtifact>
+            <extraArtifact>io.github.etacassiopeia:rift-java-junit5:${project.version}:jar</extraArtifact>
+            <extraArtifact>io.github.etacassiopeia:rift-java-spring:${project.version}:jar</extraArtifact>
+          </extraArtifacts>
+        </configuration>
+        <executions>
+          <execution>
+            <id>install</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>install</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>integration-test</id>
+            <phase>integration-test</phase>
+            <goals>
+              <goal>run</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
