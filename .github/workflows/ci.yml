@@ -70,3 +70,21 @@ jobs:
           cache: maven
       - name: Package with the release profile (no signing, no deploy)
         run: ./mvnw -B -ntp -Prelease -DskipTests -Dgpg.skip=true package
+
+  # The Docker-enabled lane for rift-java-testcontainers: RIFT_IT=1 un-gates the RiftContainer
+  # round-trip ITs (they self-skip everywhere else). ubuntu-latest runners ship a Docker daemon.
+  testcontainers-it:
+    name: testcontainers ITs (Docker, JDK 17)
+    runs-on: ubuntu-latest
+    env:
+      RIFT_IT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Run RiftContainer integration tests against Docker
+        run: ./mvnw -B -ntp -pl rift-java-testcontainers -am test

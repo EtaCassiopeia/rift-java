@@ -49,6 +49,12 @@
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>io.github.etacassiopeia</groupId>
+      <artifactId>rift-java-testcontainers</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <dependencyManagement>
@@ -81,6 +87,11 @@
       <dependency>
         <groupId>io.github.etacassiopeia</groupId>
         <artifactId>rift-java-spring</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.etacassiopeia</groupId>
+        <artifactId>rift-java-testcontainers</artifactId>
         <version>${project.version}</version>
       </dependency>
       <!-- Bare (classifier-less) coordinate: pins the version for a plain rift-java-natives
