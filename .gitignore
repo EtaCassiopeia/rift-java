@@ -21,3 +21,7 @@ dependency-reduced-pom.xml
 
 # Local native libraries dropped in for embedded dev
 native-local/
+
+# flatten-maven-plugin output (natives module)
+.flattened-pom.xml
+**/.flattened-pom.xml

@@ -16,10 +16,175 @@
   <url>https://github.com/EtaCassiopeia/rift-java</url>
 
   <dependencies>
+    <!-- Build-time only: NativesFetcher parses ffi-manifest.json with core's JSON codec. `provided`
+         keeps it off the classifier jars' transitive graph — a consumer that just wants a cdylib
+         must not drag in core. It stays on this module's own compile/test classpath. -->
+    <dependency>
+      <groupId>io.github.etacassiopeia</groupId>
+      <artifactId>rift-java-core</artifactId>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <profiles>
+    <!-- Not active by default: a normal offline build/test run must never touch the network or
+         produce classifier jars. Activate explicitly (-Pnatives-bundle) to fetch, verify, and
+         package the librift_ffi native libraries for the pinned Rift engine release. -->
+    <profile>
+      <id>natives-bundle</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>${exec-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>fetch-natives</id>
+                <phase>prepare-package</phase>
+                <goals>
+                  <goal>java</goal>
+                </goals>
+                <configuration>
+                  <mainClass>io.github.etacassiopeia.rift.natives.NativesFetcher</mainClass>
+                  <!-- exec:java runs in the Maven JVM: blockSystemExit rewrites NativesFetcher's
+                       System.exit(1) into a goal failure instead of killing the whole reactor. -->
+                  <blockSystemExit>true</blockSystemExit>
+                  <!-- 'test' classpathScope so the provided rift-java-core (build-time-only JSON codec)
+                       is visible to the exec; exec-maven-plugin's default 'compile' scope omits it. -->
+                  <classpathScope>test</classpathScope>
+                  <arguments>
+                    <argument>${rift.engine.version}</argument>
+                    <argument>${project.build.directory}/natives</argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-jar-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>jar-darwin-aarch64</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+                <configuration>
+                  <classifier>darwin-aarch64</classifier>
+                  <classesDirectory>${project.build.directory}/natives</classesDirectory>
+                  <includes>
+                    <include>native/darwin-aarch64/**</include>
+                  </includes>
+                </configuration>
+              </execution>
+              <execution>
+                <id>jar-darwin-x86_64</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+                <configuration>
+                  <classifier>darwin-x86_64</classifier>
+                  <classesDirectory>${project.build.directory}/natives</classesDirectory>
+                  <includes>
+                    <include>native/darwin-x86_64/**</include>
+                  </includes>
+                </configuration>
+              </execution>
+              <execution>
+                <id>jar-linux-aarch64</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+                <configuration>
+                  <classifier>linux-aarch64</classifier>
+                  <classesDirectory>${project.build.directory}/natives</classesDirectory>
+                  <includes>
+                    <include>native/linux-aarch64/**</include>
+                  </includes>
+                </configuration>
+              </execution>
+              <execution>
+                <id>jar-linux-x86_64</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+                <configuration>
+                  <classifier>linux-x86_64</classifier>
+                  <classesDirectory>${project.build.directory}/natives</classesDirectory>
+                  <includes>
+                    <include>native/linux-x86_64/**</include>
+                  </includes>
+                </configuration>
+              </execution>
+              <execution>
+                <id>jar-linux-musl-x86_64</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+                <configuration>
+                  <classifier>linux-musl-x86_64</classifier>
+                  <classesDirectory>${project.build.directory}/natives</classesDirectory>
+                  <includes>
+                    <include>native/linux-musl-x86_64/**</include>
+                  </includes>
+                </configuration>
+              </execution>
+              <execution>
+                <id>jar-windows-x86_64</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+                <configuration>
+                  <classifier>windows-x86_64</classifier>
+                  <classesDirectory>${project.build.directory}/natives</classesDirectory>
+                  <includes>
+                    <include>native/windows-x86_64/**</include>
+                  </includes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <!-- Published natives poms must be dependency-free: consumers of a classifier jar
+                 shouldn't transitively pull in rift-java-core, which exists only to run
+                 NativesFetcher at build time. -->
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>flatten-maven-plugin</artifactId>
+            <version>${flatten-maven-plugin.version}</version>
+            <configuration>
+              <flattenMode>oss</flattenMode>
+            </configuration>
+            <executions>
+              <execution>
+                <id>flatten</id>
+                <phase>process-resources</phase>
+                <goals>
+                  <goal>flatten</goal>
+                </goals>
+              </execution>
+              <execution>
+                <id>flatten-clean</id>
+                <phase>clean</phase>
+                <goals>
+                  <goal>clean</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
