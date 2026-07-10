@@ -35,6 +35,7 @@ try (Rift rift = Rift.embedded()) {                  // or Rift.connect(uri) / R
 | `rift-java-junit5` | 17+ | `@RiftTest` extension, imposter injection |
 | `rift-java-jackson` | 17+ | optional POJO body codec |
 | `rift-java-spring` | 17+ | Spring Boot test integration: `@EnableRift`, `@ConfigureImposter`, `@InjectImposter`/`@InjectRift`. Spring is `provided`. |
+| `rift-java-testcontainers` | 17+ | `RiftContainer` runs the rift proxy in Docker with the `hostResolver` seam wired for port mapping. See [docs/testcontainers.md](docs/testcontainers.md). |
 | `rift-java-bom` | — | one import that version-pins every module + the 6 natives classifiers |
 
 One client, three transports — embedded (in-process, no Docker, OS-assigned ports),

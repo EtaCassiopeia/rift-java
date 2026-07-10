@@ -1,0 +1,140 @@
+package io.github.etacassiopeia.rift.testcontainers;
+
+import io.github.etacassiopeia.rift.ConnectOptions;
+import io.github.etacassiopeia.rift.Rift;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.utility.DockerImageName;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.net.URI;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Properties;
+
+/**
+ * A Testcontainers container for the {@code rift-proxy} engine, for teams that run their mocks in
+ * Docker (CI without native-lib or binary access). {@link #client()} returns a {@link Rift} wired
+ * through the {@code hostResolver} seam so {@code imposter.uri()} is correct through Docker's port
+ * remapping — either fixed pre-exposed ports ({@link #withImposterPorts(int...)}) or the single-port
+ * {@link #withGateway() gateway}.
+ *
+ * <pre>{@code
+ * @Testcontainers
+ * class MyTest {
+ *     @Container static RiftContainer rift = new RiftContainer().withImposterPorts(4545);
+ *
+ *     @Test void t() {
+ *         Imposter users = rift.client().create(imposter("users").port(4545)
+ *                 .stub(onGet("/u/1").willReturn(okJson("{\"id\":1}"))));
+ *         // users.uri() == mapped host:port
+ *     }
+ * }
+ * }</pre>
+ */
+public final class RiftContainer extends GenericContainer<RiftContainer> {
+
+    /** The pinned rift engine version, single-sourced from the {@code <rift.engine.version>} property. */
+    public static final String ENGINE_VERSION = loadEngineVersion();
+
+    private static final String IMAGE = "zainalpour/rift-proxy";
+    private static final int ADMIN_PORT = 2525;
+
+    private final DockerImageName imageName;
+    private Optional<String> apiKey = Optional.empty();
+    private boolean gateway = false;
+
+    /** Uses {@code zainalpour/rift-proxy:v}{@link #ENGINE_VERSION}. */
+    public RiftContainer() {
+        this(DockerImageName.parse(IMAGE + ":v" + ENGINE_VERSION));
+    }
+
+    public RiftContainer(DockerImageName image) {
+        super(image);
+        this.imageName = image;
+        addExposedPort(ADMIN_PORT);
+        // 401 also means the admin API is up — it's just apiKey-gated (see withApiKey); treating
+        // only 200 as ready would hang startup whenever a key is configured.
+        waitingFor(Wait.forHttp("/imposters").forPort(ADMIN_PORT)
+                .forStatusCodeMatching(code -> code == 200 || code == 401));
+    }
+
+    /**
+     * The configured image name, resolved without contacting Docker (unlike {@link
+     * #getDockerImageName()}, which pulls). Package-private: it exists for Docker-free unit tests.
+     */
+    String configuredImageName() {
+        return imageName.asCanonicalNameString();
+    }
+
+    /**
+     * Requires the given admin API key on control-plane requests (engine {@code MB_APIKEY}); the
+     * {@link #client()} authenticates with the same key. The gateway data plane is not gated by it.
+     */
+    public RiftContainer withApiKey(String key) {
+        this.apiKey = Optional.of(Objects.requireNonNull(key, "key"));
+        withEnv("MB_APIKEY", key);
+        return self();
+    }
+
+    /**
+     * Pre-exposes fixed imposter ports so imposters bound to them are reachable through Docker's
+     * port mapping; {@code imposter.uri()} then resolves to the mapped host:port.
+     */
+    public RiftContainer withImposterPorts(int... ports) {
+        for (int port : ports) {
+            addExposedPort(port);
+        }
+        return self();
+    }
+
+    /**
+     * Routes imposter traffic through the single admin port via the {@code /__rift/:port} gateway
+     * instead of pre-exposed per-imposter ports — one exposed port, at the cost of a URL prefix
+     * visible to the app under test.
+     */
+    public RiftContainer withGateway() {
+        this.gateway = true;
+        return self();
+    }
+
+    /** The mapped admin API URI. Valid only once the container is started. */
+    public URI adminUri() {
+        return URI.create("http://" + getHost() + ":" + getMappedPort(ADMIN_PORT));
+    }
+
+    /**
+     * A {@link Rift} client wired to this container: the {@code hostResolver} seam is set so
+     * {@code imposter.uri()} resolves through Docker's port mapping (fixed-port mode) or the gateway
+     * prefix (gateway mode) with zero user code. Valid only once the container is started. Each call
+     * returns a new client; the caller owns it and must {@link Rift#close() close} it.
+     */
+    public Rift client() {
+        URI admin = adminUri();
+        ConnectOptions.Builder options = ConnectOptions.builder(admin);
+        apiKey.ifPresent(options::apiKey);
+        options.hostResolver(gateway
+                ? port -> URI.create(admin + "/__rift/" + port)
+                : port -> URI.create("http://" + getHost() + ":" + getMappedPort(port)));
+        return Rift.connect(options.build());
+    }
+
+    private static String loadEngineVersion() {
+        try (InputStream in = RiftContainer.class.getResourceAsStream("/rift-container.properties")) {
+            if (in == null) {
+                throw new IllegalStateException("rift-container.properties missing from the classpath");
+            }
+            Properties props = new Properties();
+            props.load(in);
+            String version = props.getProperty("engine.version");
+            if (version == null || version.isBlank() || version.startsWith("${")) {
+                throw new IllegalStateException("engine.version was not filtered at build time: " + version);
+            }
+            return version;
+        } catch (IOException e) {
+            throw new UncheckedIOException("failed to read rift-container.properties", e);
+        }
+    }
+}
