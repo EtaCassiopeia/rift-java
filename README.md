@@ -3,8 +3,10 @@
 Official Java SDK for [Rift](https://github.com/EtaCassiopeia/rift) — a high-performance,
 Mountebank-compatible HTTP/HTTPS mock server written in Rust.
 
-> **Status: design phase.** API design and milestones are tracked in the issues of this repo
-> (milestones M1/M2). No artifacts are published yet.
+> **Status: design phase.** The public API is pinned down in
+> [docs/design/sdk-api.md](docs/design/sdk-api.md) (mirrored as
+> [#19](https://github.com/EtaCassiopeia/rift-java/issues/19)); implementation is tracked in
+> the issues of this repo (milestones M1/M2). No artifacts are published yet.
 
 ## What it will look like
 
