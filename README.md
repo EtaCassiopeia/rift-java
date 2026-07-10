@@ -11,7 +11,7 @@ Mountebank-compatible HTTP/HTTPS mock server written in Rust.
 ## What it will look like
 
 ```java
-import static rift.dsl.RiftDsl.*;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
 
 try (Rift rift = Rift.embedded()) {                  // or Rift.connect(uri) / Rift.spawn()
     Imposter users = rift.create(
@@ -42,3 +42,103 @@ connect (any running Rift admin endpoint), spawn (managed `rift` binary). Full f
 surface on each: stubs/predicates/responses, response cycling, behaviors, proxy
 record/playback, fault injection, stateful scenarios, spaces/flow-state, request
 verification, and TLS-MITM intercept with truststore/`SSLContext` helpers.
+
+## Quick starts
+
+### Embedded
+
+> Requires JDK 22+; pass `--enable-native-access=ALL-UNNAMED` (JDK 21: also `--enable-preview`,
+> via `rift-java-embedded-jdk21`). Add a `rift-java-natives` classifier jar for your platform —
+> see the [BOM README](rift-java-bom/README.md#picking-a-natives-classifier-automatically-os-maven-plugin).
+
+```java
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+
+try (Rift rift = Rift.embedded()) {
+    Imposter users = rift.create(
+        imposter("users").record()
+            .stub(onGet("/api/users/1").willReturn(okJson("{\"id\":1}"))));
+
+    // point your SUT at users.uri(), then:
+    users.verify(onGet("/api/users/1"), times(1));
+}
+```
+
+### Connect
+
+Against a running rift admin endpoint:
+
+```java
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+
+URI adminUri = URI.create("http://localhost:2525");
+try (Rift rift = Rift.connect(adminUri)) {
+    Imposter users = rift.create(imposter("users").record());
+
+    // point your SUT at users.uri(), then:
+    users.verify(onGet("/api/users/1"), times(1));
+}
+```
+
+If the admin host isn't reachable at the same address an imposter's own port is (Docker,
+remapped ports), override `ConnectOptions.builder(adminUri).hostResolver(port -> ...)`.
+
+### Spawn
+
+```java
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+
+try (Rift rift = Rift.spawn()) {           // resolves (or downloads) and launches a rift binary
+    Imposter users = rift.create(imposter("users").record());
+
+    // point your SUT at users.uri(), then:
+    users.verify(onGet("/api/users/1"), times(1));
+}
+```
+
+Binary resolution order: `SpawnOptions.binaryPath(...)`, the `RIFT_BINARY_PATH` environment
+variable, a `PATH` lookup, a local version cache, then a download from the release mirror.
+
+### JUnit 5
+
+```java
+import io.github.etacassiopeia.rift.junit5.*;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+
+@RiftTest
+class UserClientTest {
+    @RiftImposter
+    static ImposterSpec usersSpec = imposter("users").record()
+            .stub(onGet("/api/users/1").willReturn(okJson("{\"id\":1}")));
+
+    @InjectImposter("users") Imposter users;
+    @Test
+    void fetchesUser() {
+        users.verify(onGet("/api/users/1"), times(1));
+    }
+}
+```
+
+See [docs/junit5.md](docs/junit5.md) for `Transport`/`Reset` semantics and parallel-execution notes.
+
+### Spring Boot
+
+```java
+import io.github.etacassiopeia.rift.spring.*;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+
+@SpringBootTest
+@EnableRift
+@ConfigureImposter(name = "users", baseUrlProperty = "users.base-url")
+class UserClientTest {
+    @InjectImposter("users") Imposter users;
+
+    @Test
+    void fetchesUser() {
+        users.addStub(onGet("/api/users/1").willReturn(okJson("{\"id\":1}")));
+        users.verify(onGet("/api/users/1"), times(1));
+    }
+}
+```
+
+TLS-MITM intercept (`rift.intercept()`) is covered in [docs/intercept.md](docs/intercept.md).

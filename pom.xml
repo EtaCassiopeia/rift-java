@@ -145,6 +145,9 @@
       </activation>
       <modules>
         <module>rift-java-embedded</module>
+        <!-- The parity samples use the embedded engine + intercept, so they need JDK 22+ same as
+             rift-java-embedded itself; must not build on the JDK 17 lane. -->
+        <module>examples</module>
       </modules>
     </profile>
 
