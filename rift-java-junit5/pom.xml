@@ -29,6 +29,13 @@
       <artifactId>junit-jupiter-engine</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Drives the deliberately-failing dumpRecordedOnFailure fixtures in-process so they don't
+         fail the suite (asserts the published report entries). Version via the parent junit-bom. -->
+    <dependency>
+      <groupId>org.junit.platform</groupId>
+      <artifactId>junit-platform-testkit</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

@@ -1,6 +1,7 @@
 package io.github.etacassiopeia.rift.junit5;
 
 import io.github.etacassiopeia.rift.Imposter;
+import io.github.etacassiopeia.rift.RecordedRequest;
 import io.github.etacassiopeia.rift.Rift;
 import io.github.etacassiopeia.rift.dsl.ImposterSpec;
 import io.github.etacassiopeia.rift.model.ImposterDefinition;
@@ -12,49 +13,69 @@ import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.api.extension.ParameterResolutionException;
 import org.junit.jupiter.api.extension.ParameterResolver;
 import org.junit.jupiter.api.extension.TestInstancePostProcessor;
+import org.junit.jupiter.api.extension.TestWatcher;
 import org.junit.platform.commons.support.AnnotationSupport;
 import org.junit.platform.commons.support.HierarchyTraversalMode;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * The {@code @RiftTest} JUnit 5 extension: starts one {@link Rift} engine per test class, creates
- * the {@link RiftImposter}-declared imposters, injects {@link InjectRift}/{@link InjectImposter}
- * fields and parameters, and drives the {@link Reset} policy between test methods.
+ * the configured imposters, injects {@link InjectRift}/{@link InjectImposter} fields and parameters,
+ * and drives the {@link Reset} policy between test methods.
+ *
+ * <p>Two configuration modes, identical lifecycle:
+ * <ul>
+ *   <li><b>Annotation</b> — {@code @RiftTest} on the class supplies transport/adminUri/reset and
+ *       {@code static @RiftImposter ImposterSpec} fields supply the imposters (JUnit constructs this
+ *       extension via the {@code @ExtendWith} meta-annotation).</li>
+ *   <li><b>Programmatic</b> (Tier-2) — {@link #newInstance()} builds a configured instance for use
+ *       as a {@code @RegisterExtension static} field, when transport/imposters are computed.</li>
+ * </ul>
+ *
+ * <p>With {@code dumpRecordedOnFailure}, a failing test publishes each imposter's recorded requests
+ * to the JUnit report as {@code rift.recorded.<name>} (capped at {@value #MAX_DUMP} per imposter).
  */
 public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCallback, AfterAllCallback,
-        TestInstancePostProcessor, ParameterResolver {
+        TestInstancePostProcessor, ParameterResolver, TestWatcher {
 
     private static final ExtensionContext.Namespace NAMESPACE = ExtensionContext.Namespace.create(RiftTestExtension.class);
     private static final String STORE_KEY = "riftTestContext";
+    static final int MAX_DUMP = 20;
+
+    /** Programmatic configuration (Tier-2); {@code null} in annotation mode. */
+    private final Config config;
+
+    /** Public no-arg constructor for the {@code @ExtendWith(RiftTestExtension.class)} path. */
+    public RiftTestExtension() {
+        this.config = null;
+    }
+
+    private RiftTestExtension(Config config) {
+        this.config = config;
+    }
+
+    /** Starts a Tier-2 programmatic builder for use as a {@code @RegisterExtension static} field. */
+    public static Builder newInstance() {
+        return new Builder();
+    }
 
     @Override
-    public void beforeAll(ExtensionContext context) throws Exception {
-        Class<?> testClass = context.getRequiredTestClass();
-
-        // The test class's static initializer commonly publishes the admin-URI system property
-        // @RiftTest.adminUri()'s ${...} placeholder resolves against (see RiftExtensionIT); JUnit
-        // only guarantees that runs once the class is loaded, which isn't otherwise guaranteed to
-        // have happened yet when this callback fires. Force it now, before resolving adminUri.
+    public void beforeAll(ExtensionContext context) {
+        ResolvedConfig resolved = resolve(context);
+        Rift rift = buildRift(resolved.transport(), resolved.adminUri());
         try {
-            Class.forName(testClass.getName(), true, testClass.getClassLoader());
-        } catch (ClassNotFoundException e) {
-            throw new IllegalStateException("failed to force-initialize test class " + testClass.getName(), e);
-        }
-
-        RiftTest riftTest = AnnotationSupport.findAnnotation(testClass, RiftTest.class)
-                .orElseThrow(() -> new IllegalStateException("@RiftTest not found on " + testClass.getName()));
-
-        String resolvedAdminUri = resolveAdminUri(riftTest.adminUri());
-        Rift rift = buildRift(riftTest.transport(), resolvedAdminUri);
-        try {
-            Map<String, Imposter> impostersByName = createConfiguredImposters(rift, testClass);
-            RiftTestContext riftTestContext = new RiftTestContext(rift, impostersByName, riftTest.reset());
-            if (riftTest.reset() == Reset.PER_CLASS) {
+            Map<String, Imposter> impostersByName = createImposters(rift, resolved.imposters());
+            RiftTestContext riftTestContext =
+                    new RiftTestContext(rift, impostersByName, resolved.reset(), resolved.dumpRecordedOnFailure());
+            if (resolved.reset() == Reset.PER_CLASS) {
                 riftTestContext.resetConfiguredImposters();
             }
             // Stored only after the (possibly-throwing) PER_CLASS reset — so a failure here closes the
@@ -108,6 +129,31 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
         return riftTestContext.imposter(injectImposter.value());
     }
 
+    /**
+     * On a failing test, publishes each imposter's recorded requests to the JUnit report when {@code
+     * dumpRecordedOnFailure} is set. Reads the context via the (hierarchical) store rather than the
+     * throwing accessor: a diagnostics hook must never mask the actual test failure with its own.
+     */
+    @Override
+    public void testFailed(ExtensionContext context, Throwable cause) {
+        RiftTestContext riftTestContext = context.getStore(NAMESPACE).get(STORE_KEY, RiftTestContext.class);
+        if (riftTestContext == null || !riftTestContext.dumpRecordedOnFailure()) {
+            return;
+        }
+        riftTestContext.forEachImposter((name, imposter) -> {
+            List<RecordedRequest> recorded;
+            try {
+                recorded = imposter.recorded();
+            } catch (RuntimeException e) {
+                context.publishReportEntry("rift.recorded." + name, "could not fetch recorded requests: " + e);
+                return;
+            }
+            if (!recorded.isEmpty()) {
+                context.publishReportEntry("rift.recorded." + name, formatRecordedDump(recorded));
+            }
+        });
+    }
+
     @Override
     public void afterAll(ExtensionContext context) {
         RiftTestContext riftTestContext = context.getStore(NAMESPACE).get(STORE_KEY, RiftTestContext.class);
@@ -116,12 +162,50 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
         }
     }
 
-    private static RiftTestContext riftTestContext(ExtensionContext context) {
-        RiftTestContext riftTestContext = context.getStore(NAMESPACE).get(STORE_KEY, RiftTestContext.class);
-        if (riftTestContext == null) {
-            throw new IllegalStateException("no RiftTestContext found; is @RiftTest present on the test class?");
+    /**
+     * Formats a compact per-imposter dump, one {@code METHOD path} per line, capped at {@value
+     * #MAX_DUMP} with a trailing count of the requests omitted. Package-private for direct testing.
+     */
+    static String formatRecordedDump(List<RecordedRequest> recorded) {
+        int total = recorded.size();
+        int shown = Math.min(total, MAX_DUMP);
+        StringBuilder sb = new StringBuilder();
+        sb.append(total).append(" recorded request(s)");
+        if (total > shown) {
+            sb.append(" (showing first ").append(shown).append(')');
         }
-        return riftTestContext;
+        sb.append(':');
+        for (int i = 0; i < shown; i++) {
+            RecordedRequest request = recorded.get(i);
+            sb.append('\n').append(request.method()).append(' ').append(request.path());
+        }
+        if (total > shown) {
+            sb.append("\n… ").append(total - shown).append(" more");
+        }
+        return sb.toString();
+    }
+
+    private ResolvedConfig resolve(ExtensionContext context) {
+        if (config != null) {
+            return new ResolvedConfig(config.transport(), resolveAdminUri(config.adminUri()),
+                    config.imposters(), config.reset(), config.dumpRecordedOnFailure());
+        }
+        Class<?> testClass = context.getRequiredTestClass();
+
+        // The test class's static initializer commonly publishes the admin-URI system property
+        // @RiftTest.adminUri()'s ${...} placeholder resolves against (see RiftExtensionIT); JUnit
+        // only guarantees that runs once the class is loaded, which isn't otherwise guaranteed to
+        // have happened yet when this callback fires. Force it now, before resolving adminUri.
+        try {
+            Class.forName(testClass.getName(), true, testClass.getClassLoader());
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("failed to force-initialize test class " + testClass.getName(), e);
+        }
+
+        RiftTest riftTest = AnnotationSupport.findAnnotation(testClass, RiftTest.class)
+                .orElseThrow(() -> new IllegalStateException("@RiftTest not found on " + testClass.getName()));
+        return new ResolvedConfig(riftTest.transport(), resolveAdminUri(riftTest.adminUri()),
+                collectSpecFields(testClass), riftTest.reset(), riftTest.dumpRecordedOnFailure());
     }
 
     private static String resolveAdminUri(String adminUri) {
@@ -137,7 +221,8 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
         return switch (transport) {
             case CONNECT -> {
                 if (resolvedAdminUri.isBlank()) {
-                    throw new IllegalStateException("@RiftTest(transport=CONNECT) requires a non-blank adminUri");
+                    throw new IllegalStateException(
+                            "CONNECT transport requires a non-blank adminUri (set it on @RiftTest or the builder)");
                 }
                 yield Rift.connect(URI.create(resolvedAdminUri));
             }
@@ -148,37 +233,115 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
     }
 
     /**
-     * Creates every {@code static} {@link ImposterSpec} field annotated {@link RiftImposter}, keyed
-     * by the spec's own declared name (via {@link ImposterDefinition#name()}) rather than the name
-     * reported back by the engine: a minimal admin API is not required to echo a {@code name} field
-     * on {@code GET}/{@code POST /imposters} (it is client-side bookkeeping, not wire-required), so
-     * relying on {@code Imposter#name()} here would break against such engines.
+     * Reads each {@code static} {@link ImposterSpec} field annotated {@link RiftImposter} (annotation
+     * mode), in declaration order. Name assignment/deduplication happens uniformly in {@link
+     * #createImposters}.
      */
-    private static Map<String, Imposter> createConfiguredImposters(Rift rift, Class<?> testClass) throws Exception {
-        Map<String, Imposter> impostersByName = new LinkedHashMap<>();
+    private static List<ImposterSpec> collectSpecFields(Class<?> testClass) {
+        List<ImposterSpec> specs = new ArrayList<>();
         for (Field field : AnnotationSupport.findAnnotatedFields(
                 testClass, RiftImposter.class,
                 f -> Modifier.isStatic(f.getModifiers()) && ImposterSpec.class.isAssignableFrom(f.getType()),
                 HierarchyTraversalMode.TOP_DOWN)) {
             field.trySetAccessible();
-            ImposterSpec spec = (ImposterSpec) field.get(null);
+            ImposterSpec spec;
+            try {
+                spec = (ImposterSpec) field.get(null);
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException("cannot read @RiftImposter field " + field, e);
+            }
             if (spec == null) {
                 throw new IllegalStateException("@RiftImposter field " + field + " is null");
             }
+            specs.add(spec);
+        }
+        return specs;
+    }
+
+    /**
+     * Builds and creates every imposter, keyed by the spec's own declared name (via {@link
+     * ImposterDefinition#name()}) rather than the name reported back by the engine: a minimal admin
+     * API is not required to echo a {@code name} field on {@code GET}/{@code POST /imposters} (it is
+     * client-side bookkeeping, not wire-required), so relying on {@code Imposter#name()} here would
+     * break against such engines.
+     */
+    private static Map<String, Imposter> createImposters(Rift rift, List<ImposterSpec> specs) {
+        Map<String, Imposter> impostersByName = new LinkedHashMap<>();
+        for (ImposterSpec spec : specs) {
             ImposterDefinition definition = spec.build();
             String name = definition.name().orElseThrow(() -> new IllegalStateException(
-                    "@RiftImposter field " + field + " has no name"));
+                    "imposter has no name; every @RiftTest/builder imposter must be named"));
             if (impostersByName.containsKey(name)) {
-                throw new IllegalStateException("duplicate @RiftImposter name '" + name + "' (field " + field + ")");
+                throw new IllegalStateException("duplicate imposter name '" + name + "'");
             }
-            Imposter imposter = rift.create(definition);
-            impostersByName.put(name, imposter);
+            impostersByName.put(name, rift.create(definition));
         }
         return impostersByName;
+    }
+
+    private static RiftTestContext riftTestContext(ExtensionContext context) {
+        RiftTestContext riftTestContext = context.getStore(NAMESPACE).get(STORE_KEY, RiftTestContext.class);
+        if (riftTestContext == null) {
+            throw new IllegalStateException("no RiftTestContext found; is @RiftTest present on the test class?");
+        }
+        return riftTestContext;
     }
 
     private static void setField(Field field, Object testInstance, Object value) throws IllegalAccessException {
         field.trySetAccessible();
         field.set(testInstance, value);
+    }
+
+    /** Immutable Tier-2 configuration produced by {@link Builder}. */
+    private record Config(Transport transport, String adminUri, List<ImposterSpec> imposters,
+                          Reset reset, boolean dumpRecordedOnFailure) {
+    }
+
+    /** Configuration resolved for a run, from either the builder or the {@code @RiftTest} annotation. */
+    private record ResolvedConfig(Transport transport, String adminUri, List<ImposterSpec> imposters,
+                                  Reset reset, boolean dumpRecordedOnFailure) {
+    }
+
+    /** Fluent builder for the Tier-2 programmatic {@code @RegisterExtension} path. */
+    public static final class Builder {
+        private Transport transport = Transport.AUTO;
+        private String adminUri = "";
+        private final List<ImposterSpec> imposters = new ArrayList<>();
+        private Reset reset = Reset.PER_TEST;
+        private boolean dumpRecordedOnFailure = false;
+
+        private Builder() {
+        }
+
+        public Builder transport(Transport transport) {
+            this.transport = Objects.requireNonNull(transport, "transport");
+            return this;
+        }
+
+        public Builder adminUri(String adminUri) {
+            this.adminUri = Objects.requireNonNull(adminUri, "adminUri");
+            return this;
+        }
+
+        /** Adds an imposter; may be called repeatedly. */
+        public Builder imposter(ImposterSpec spec) {
+            this.imposters.add(Objects.requireNonNull(spec, "spec"));
+            return this;
+        }
+
+        public Builder reset(Reset reset) {
+            this.reset = Objects.requireNonNull(reset, "reset");
+            return this;
+        }
+
+        public Builder dumpRecordedOnFailure(boolean dumpRecordedOnFailure) {
+            this.dumpRecordedOnFailure = dumpRecordedOnFailure;
+            return this;
+        }
+
+        public RiftTestExtension build() {
+            return new RiftTestExtension(
+                    new Config(transport, adminUri, List.copyOf(imposters), reset, dumpRecordedOnFailure));
+        }
     }
 }
