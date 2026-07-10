@@ -140,8 +140,8 @@ class CorpusExpressibilityTest {
                         onRequest()
                                 .withPath(RiftDsl.equals("/auth/validate"))
                                 .withMethod(deepEquals("GET"))
-                                .withHeader("Authorization", exists())
-                                .withHeader("Authorization", startsWith("Bearer "))
+                                .withPredicate(header("Authorization", exists()))
+                                .withPredicate(header("Authorization", startsWith("Bearer ")))
                                 .scenario("Auth-ValidateToken-Success")
                                 .willReturn(okJson("""
                                         {"valid": true, "user": {"id": "user-001", "username": "admin", "role": "admin"}}
