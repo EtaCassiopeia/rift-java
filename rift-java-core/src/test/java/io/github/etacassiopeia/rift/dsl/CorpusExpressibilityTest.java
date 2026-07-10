@@ -1,8 +1,8 @@
 package io.github.etacassiopeia.rift.dsl;
 
 import io.github.etacassiopeia.rift.json.JsonValue;
-import io.github.etacassiopeia.rift.model.Imposter;
-import io.github.etacassiopeia.rift.model.Imposters;
+import io.github.etacassiopeia.rift.model.ImposterDefinition;
+import io.github.etacassiopeia.rift.model.ImposterDefinitions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The gate for issue #3: every corpus fixture (the same six fixtures {@code
  * WireModelRoundTripTest} exercises for the wire model itself) must be buildable using <em>only</em>
- * the {@link RiftDsl} static API — never {@code Imposters.fromJson}/{@code Stub.fromJson} — and the
+ * the {@link RiftDsl} static API — never {@code ImposterDefinitions.fromJson}/{@code Stub.fromJson} — and the
  * built model must serialize to a JSON tree semantically equal to the fixture. Parsing the fixture
  * is used only to obtain the expected tree for the comparison, never to build the model under test.
  *
@@ -82,7 +82,7 @@ class CorpusExpressibilityTest {
         assertFixtureExpressible("task-management-api.json", buildTaskManagementApi());
     }
 
-    private static Imposter buildBasicApi() {
+    private static ImposterDefinition buildBasicApi() {
         return imposter("Basic REST API")
                 .port(4545)
                 .protocol("http")
@@ -101,7 +101,7 @@ class CorpusExpressibilityTest {
                 .build();
     }
 
-    private static Imposter buildAuthenticationApi() {
+    private static ImposterDefinition buildAuthenticationApi() {
         return imposter("Authentication API")
                 .port(4547)
                 .protocol("http")
@@ -163,7 +163,7 @@ class CorpusExpressibilityTest {
                 .build();
     }
 
-    private static Imposter buildErrorTesting() {
+    private static ImposterDefinition buildErrorTesting() {
         return imposter("Error Testing")
                 .port(4545)
                 .protocol("http")
@@ -212,7 +212,7 @@ class CorpusExpressibilityTest {
                 .build();
     }
 
-    private static Imposter buildFeatureFlagsApi() {
+    private static ImposterDefinition buildFeatureFlagsApi() {
         return imposter("Feature Flags API")
                 .port(4546)
                 .protocol("http")
@@ -253,7 +253,7 @@ class CorpusExpressibilityTest {
                 .build();
     }
 
-    private static Imposter buildLatencyTesting() {
+    private static ImposterDefinition buildLatencyTesting() {
         return imposter("Latency Testing")
                 .port(4545)
                 .protocol("http")
@@ -274,7 +274,7 @@ class CorpusExpressibilityTest {
                 .build();
     }
 
-    private static Imposter buildTaskManagementApi() {
+    private static ImposterDefinition buildTaskManagementApi() {
         return imposter("Task Management API")
                 .port(4545)
                 .protocol("http")
@@ -360,10 +360,10 @@ class CorpusExpressibilityTest {
                 .build();
     }
 
-    private static void assertFixtureExpressible(String fixtureName, Imposter built) {
+    private static void assertFixtureExpressible(String fixtureName, ImposterDefinition built) {
         String fixtureText = readFixture(fixtureName);
         JsonValue expected = JsonValue.parse(fixtureText);
-        JsonValue actual = JsonValue.parse(new Imposters(List.of(built)).toJson());
+        JsonValue actual = JsonValue.parse(new ImposterDefinitions(List.of(built)).toJson());
         assertTrue(
                 JsonValue.semanticEquals(expected, actual),
                 () -> fixtureName + ": DSL-built imposter does not match the fixture.\n  expected: "

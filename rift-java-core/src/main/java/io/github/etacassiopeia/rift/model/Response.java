@@ -51,6 +51,17 @@ public sealed interface Response {
         if (obj.get("_rift") != null) {
             return new RiftScript(RiftResponseExtension.read(JsonSupport.requireObject(obj.get("_rift"), "_rift")));
         }
+        // Flat/recorded form: a bare "is" response with no wrapper — top-level statusCode/headers/
+        // body/_mode, as recorded stubs look. Read it as an Is (never lose the fields); it writes
+        // back in the canonical is:{} shape. Behaviors are response-level siblings, so a flat form
+        // that also carries _behaviors/behaviors is parsed as behaviors (not folded into the is
+        // object) and the is-content is read from the remaining keys — any genuinely unknown is-key
+        // is still preserved through IsResponse.extra. (_rift is handled above, before this branch.)
+        if (obj.has("statusCode") || obj.has("headers") || obj.has("body") || obj.has("_mode")) {
+            Behaviors behaviors = readBehaviors(obj);
+            JsonObject isContent = JsonSupport.withoutKeys(obj, "_behaviors", "behaviors");
+            return new Is(IsResponse.read(isContent), behaviors, Optional.empty());
+        }
         return new Is(new IsResponse(IsResponse.DEFAULT_STATUS_CODE), Behaviors.EMPTY, Optional.empty());
     }
 

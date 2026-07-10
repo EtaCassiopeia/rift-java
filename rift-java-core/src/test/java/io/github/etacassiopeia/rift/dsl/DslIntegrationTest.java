@@ -1,7 +1,7 @@
 package io.github.etacassiopeia.rift.dsl;
 
-import io.github.etacassiopeia.rift.model.Imposter;
-import io.github.etacassiopeia.rift.model.Imposters;
+import io.github.etacassiopeia.rift.model.ImposterDefinition;
+import io.github.etacassiopeia.rift.model.ImposterDefinitions;
 import io.github.etacassiopeia.rift.model.Response;
 import io.github.etacassiopeia.rift.model.Stub;
 
@@ -29,7 +29,7 @@ class DslIntegrationTest {
 
     @Test
     void proxyResponseWiredIntoAStubSerializesStably() {
-        Imposter imposter = imposter("proxy-api")
+        ImposterDefinition imposter = imposter("proxy-api")
                 .port(5000)
                 .stub(onGet("/upstream")
                         .willReturn(proxyTo("http://backend:8080").proxyAlways().injectHeader("X-From", "rift")))
@@ -43,8 +43,8 @@ class DslIntegrationTest {
         assertEquals("rift", proxy.proxy().injectHeaders().get("X-From"));
 
         // Round-trips through the codec: serialize then re-parse yields an equal model.
-        Imposters wrapper = new Imposters(List.of(imposter));
-        assertEquals(wrapper, Imposters.fromJson(wrapper.toJson()));
+        ImposterDefinitions wrapper = new ImposterDefinitions(List.of(imposter));
+        assertEquals(wrapper, ImposterDefinitions.fromJson(wrapper.toJson()));
     }
 
     @Test
@@ -55,7 +55,7 @@ class DslIntegrationTest {
                 .when("stepped", onGet("/step2")).respond(okJson("{\"step\":2}")).goTo("done")
                 .stubs();
 
-        Imposter imposter = imposter("fsm").port(6000).stub(scenarioStubs).build();
+        ImposterDefinition imposter = imposter("fsm").port(6000).stub(scenarioStubs).build();
 
         assertEquals(2, imposter.stubs().size());
         Stub first = imposter.stubs().get(0);
@@ -68,16 +68,16 @@ class DslIntegrationTest {
         assertEquals("stepped", second.requiredScenarioState().orElseThrow());
         assertEquals("done", second.newScenarioState().orElseThrow());
 
-        Imposters wrapper = new Imposters(List.of(imposter));
-        assertEquals(wrapper, Imposters.fromJson(wrapper.toJson()));
+        ImposterDefinitions wrapper = new ImposterDefinitions(List.of(imposter));
+        assertEquals(wrapper, ImposterDefinitions.fromJson(wrapper.toJson()));
     }
 
     @Test
     void eqIsAStaticImportableAliasForEquals() {
         // eq(...) and the qualified RiftDsl.equals(...) must produce the same matcher/model.
-        Imposter viaEq = imposter("m").stub(onGet("/x").withHeader("Accept", eq("application/json"))
+        ImposterDefinition viaEq = imposter("m").stub(onGet("/x").withHeader("Accept", eq("application/json"))
                 .willReturn(okJson("{}"))).build();
-        Imposter viaEquals = imposter("m").stub(onGet("/x").withHeader("Accept", RiftDsl.equals("application/json"))
+        ImposterDefinition viaEquals = imposter("m").stub(onGet("/x").withHeader("Accept", RiftDsl.equals("application/json"))
                 .willReturn(okJson("{}"))).build();
         assertEquals(viaEquals, viaEq);
     }

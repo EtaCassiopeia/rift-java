@@ -34,12 +34,12 @@ class WireModelRoundTripTest {
         String text = readFixture(fixtureName);
 
         // G1 — parses without loss: every imposter/stub/predicate/response is a typed value.
-        Imposters model1 = assertDoesNotThrow(() -> Imposters.fromJson(text), fixtureName + ": must parse without throwing");
+        ImposterDefinitions model1 = assertDoesNotThrow(() -> ImposterDefinitions.fromJson(text), fixtureName + ": must parse without throwing");
         assertTrue(!model1.imposters().isEmpty(), fixtureName + ": fixture must contain at least one imposter");
 
         // G2 — lossless round-trip stability: parse -> write -> parse yields an equal model.
         String serialized = model1.toJson();
-        Imposters model2 = Imposters.fromJson(serialized);
+        ImposterDefinitions model2 = ImposterDefinitions.fromJson(serialized);
         assertEquals(model1, model2, fixtureName + ": G2 round-trip must be stable");
 
         // G3 — semantic equivalence to the input modulo key order + documented normalizations.

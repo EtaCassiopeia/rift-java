@@ -4,7 +4,7 @@ import io.github.etacassiopeia.rift.json.JsonBool;
 import io.github.etacassiopeia.rift.json.JsonString;
 import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.Behavior;
-import io.github.etacassiopeia.rift.model.Imposter;
+import io.github.etacassiopeia.rift.model.ImposterDefinition;
 import io.github.etacassiopeia.rift.model.IsResponse;
 import io.github.etacassiopeia.rift.model.Predicate;
 import io.github.etacassiopeia.rift.model.PredicateOperation;
@@ -494,12 +494,12 @@ class DslConstructTest {
     }
 
     // ------------------------------------------------------------------
-    // Imposter
+    // ImposterDefinition
     // ------------------------------------------------------------------
 
     @Test
     void imposterBasicProperties() {
-        Imposter imposter = imposter("My Imposter")
+        ImposterDefinition imposter = imposter("My ImposterDefinition")
                 .port(9999)
                 .protocol("https")
                 .record()
@@ -509,7 +509,7 @@ class DslConstructTest {
                 .stub(onGet("/x").willReturn(ok()))
                 .build();
 
-        assertEquals("My Imposter", imposter.name().orElseThrow());
+        assertEquals("My ImposterDefinition", imposter.name().orElseThrow());
         assertEquals(9999, imposter.port().orElseThrow());
         assertEquals("https", imposter.protocol());
         assertTrue(imposter.recordRequests());
@@ -522,7 +522,7 @@ class DslConstructTest {
 
     @Test
     void imposterWithNoOptionalFlagsDefaultsToFalse() {
-        Imposter imposter = imposter("Plain").build();
+        ImposterDefinition imposter = imposter("Plain").build();
         assertFalse(imposter.recordRequests());
         assertFalse(imposter.recordMatches());
         assertFalse(imposter.allowCors());

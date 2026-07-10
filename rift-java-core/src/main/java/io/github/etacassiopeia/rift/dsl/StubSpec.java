@@ -5,6 +5,7 @@ import io.github.etacassiopeia.rift.model.Response;
 import io.github.etacassiopeia.rift.model.Stub;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -115,6 +116,6 @@ public final class StubSpec {
     public Stub build() {
         return new Stub(
                 scenarioName, requiredScenarioState, newScenarioState, Optional.empty(), Optional.empty(),
-                Optional.empty(), predicates, responses, Optional.empty(), Optional.empty());
+                Optional.empty(), predicates, responses, Optional.empty(), Optional.empty(), Map.of());
     }
 }
