@@ -43,7 +43,7 @@ final class FfiCalls {
     int createImposter(JsonValue def) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            int port = ffi.createImposter(handle, args.allocateFrom(def.toJson()));
+            int port = ffi.createImposter(handle, FfmCompat.allocateCString(args, def.toJson()));
             if (port == 0) {
                 throw engineError();
             }
@@ -54,7 +54,7 @@ final class FfiCalls {
     void replaceStubs(int port, JsonValue stubs) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            int rc = ffi.replaceStubs(handle, port, args.allocateFrom(stubs.toJson()));
+            int rc = ffi.replaceStubs(handle, port, FfmCompat.allocateCString(args, stubs.toJson()));
             if (rc != 0) {
                 throw engineError();
             }
@@ -83,14 +83,15 @@ final class FfiCalls {
     JsonValue applyConfig(JsonValue config) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            return readJsonAndFree(ffi.applyConfig(handle, args.allocateFrom(config.toJson())));
+            return readJsonAndFree(ffi.applyConfig(handle, FfmCompat.allocateCString(args, config.toJson())));
         }
     }
 
     Optional<JsonValue> flowStateGet(int port, String flowId, String key) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            MemorySegment seg = ffi.flowStateGet(handle, port, args.allocateFrom(flowId), args.allocateFrom(key));
+            MemorySegment seg = ffi.flowStateGet(handle, port, FfmCompat.allocateCString(args, flowId),
+                    FfmCompat.allocateCString(args, key));
             JsonValue envelope = readJsonAndFree(seg);
             if (envelope instanceof JsonObject obj && obj.get("found") instanceof JsonBool found && found.value()) {
                 return Optional.of(obj.get("value"));
@@ -102,8 +103,8 @@ final class FfiCalls {
     void flowStatePut(int port, String flowId, String key, JsonValue value) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            int rc = ffi.flowStatePut(handle, port, args.allocateFrom(flowId), args.allocateFrom(key),
-                    args.allocateFrom(value.toJson()));
+            int rc = ffi.flowStatePut(handle, port, FfmCompat.allocateCString(args, flowId), FfmCompat.allocateCString(args, key),
+                    FfmCompat.allocateCString(args, value.toJson()));
             if (rc != 0) {
                 throw engineError();
             }
@@ -113,7 +114,8 @@ final class FfiCalls {
     void flowStateDelete(int port, String flowId, String key) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            int rc = ffi.flowStateDelete(handle, port, args.allocateFrom(flowId), args.allocateFrom(key));
+            int rc = ffi.flowStateDelete(handle, port, FfmCompat.allocateCString(args, flowId),
+                    FfmCompat.allocateCString(args, key));
             if (rc != 0) {
                 throw engineError();
             }
@@ -123,7 +125,8 @@ final class FfiCalls {
     void spaceAddStub(int port, String flowId, JsonValue stub) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            int rc = ffi.spaceAddStub(handle, port, args.allocateFrom(flowId), args.allocateFrom(stub.toJson()));
+            int rc = ffi.spaceAddStub(handle, port, FfmCompat.allocateCString(args, flowId),
+                    FfmCompat.allocateCString(args, stub.toJson()));
             if (rc != 0) {
                 throw engineError();
             }
@@ -133,14 +136,14 @@ final class FfiCalls {
     JsonValue spaceListStubs(int port, String flowId) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            return readJsonAndFree(ffi.spaceListStubs(handle, port, args.allocateFrom(flowId)));
+            return readJsonAndFree(ffi.spaceListStubs(handle, port, FfmCompat.allocateCString(args, flowId)));
         }
     }
 
     void spaceDelete(int port, String flowId) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            int rc = ffi.spaceDelete(handle, port, args.allocateFrom(flowId));
+            int rc = ffi.spaceDelete(handle, port, FfmCompat.allocateCString(args, flowId));
             if (rc != 0) {
                 throw engineError();
             }
@@ -150,7 +153,7 @@ final class FfiCalls {
     JsonValue spaceRecorded(int port, String flowId) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            return readJsonAndFree(ffi.spaceRecorded(handle, port, args.allocateFrom(flowId)));
+            return readJsonAndFree(ffi.spaceRecorded(handle, port, FfmCompat.allocateCString(args, flowId)));
         }
     }
 
@@ -163,7 +166,7 @@ final class FfiCalls {
     JsonValue serveAdmin(JsonValue options) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            return readJsonAndFree(ffi.serveAdmin(handle, args.allocateFrom(options.toJson())));
+            return readJsonAndFree(ffi.serveAdmin(handle, FfmCompat.allocateCString(args, options.toJson())));
         }
     }
 
