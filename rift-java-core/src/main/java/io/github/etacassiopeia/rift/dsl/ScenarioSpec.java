@@ -13,32 +13,32 @@ import java.util.stream.Stream;
  * of transitions added via {@code .when(fromState, stub).respond(response).goTo(toState)}. Each
  * transition produces one {@link Stub} carrying the scenario name plus the from/to state pair
  * ({@code requiredScenarioState}/{@code newScenarioState}); the from-state named by {@link
- * #startingAt(String)} (if any) is written as <em>no</em> {@code requiredScenarioState}, matching
- * the engine's convention that a scenario with no recorded state is in its starting state.
+ * #startingAt(String)} is written as <em>no</em> {@code requiredScenarioState}, matching the
+ * engine's convention that a scenario with no recorded state is in its starting state.
  *
- * <p>Instances are immutable: {@link #startingAt(String)} and each completed transition return a
- * new {@code ScenarioSpec}. The terminal {@link #stubs()} returns the built {@link Stub} list, for
- * use with {@link ImposterSpec#stub(List)}.
+ * <p>Instances are immutable. The {@code requiredScenarioState} of each transition is resolved
+ * lazily in {@link #stubs()} against the final starting state, so {@link #startingAt(String)} and
+ * the transitions may be declared in any order without silently mis-guarding the starting transition.
  */
 public final class ScenarioSpec {
 
     private final String name;
-    private final String startState;
-    private final List<Stub> stubs;
+    private final Optional<String> startState;
+    private final List<PendingTransition> transitions;
 
     ScenarioSpec(String name) {
-        this(name, null, List.of());
+        this(name, Optional.empty(), List.of());
     }
 
-    private ScenarioSpec(String name, String startState, List<Stub> stubs) {
+    private ScenarioSpec(String name, Optional<String> startState, List<PendingTransition> transitions) {
         this.name = name;
         this.startState = startState;
-        this.stubs = stubs;
+        this.transitions = transitions;
     }
 
     /** Names the scenario's starting state, so transitions out of it omit {@code requiredScenarioState}. */
     public ScenarioSpec startingAt(String state) {
-        return new ScenarioSpec(name, state, stubs);
+        return new ScenarioSpec(name, Optional.of(state), transitions);
     }
 
     /** Begins a transition out of {@code fromState}, gated by the given seed stub's predicates. */
@@ -46,14 +46,33 @@ public final class ScenarioSpec {
         return new Transition(fromState, stub);
     }
 
-    /** All transitions added so far, as built {@link Stub} values, in the order they were added. */
+    /**
+     * All transitions added so far, as built {@link Stub} values, in the order they were added. The
+     * {@code requiredScenarioState} guard is computed here against the final starting state.
+     *
+     * @throws IllegalStateException if {@link #startingAt(String)} was never called — without a
+     *     declared starting state, the first transition's {@code requiredScenarioState} guard would
+     *     be unsatisfiable (the engine's scenario state is unset until some transition sets it).
+     */
     public List<Stub> stubs() {
-        return stubs;
+        if (startState.isEmpty()) {
+            throw new IllegalStateException(
+                    "scenario \"" + name + "\" has no starting state — call startingAt(...) before stubs()");
+        }
+        return transitions.stream().map(this::buildStub).toList();
     }
 
-    private ScenarioSpec withStub(Stub stub) {
-        return new ScenarioSpec(name, startState, Stream.concat(stubs.stream(), Stream.of(stub)).toList());
+    private Stub buildStub(PendingTransition t) {
+        Optional<String> required = startState.get().equals(t.fromState())
+                ? Optional.empty() : Optional.of(t.fromState());
+        return t.stub().withScenarioTransition(name, required, t.toState()).build();
     }
+
+    private ScenarioSpec withTransition(PendingTransition t) {
+        return new ScenarioSpec(name, startState, Stream.concat(transitions.stream(), Stream.of(t)).toList());
+    }
+
+    private record PendingTransition(String fromState, StubSpec stub, String toState) {}
 
     /** The second step of a scenario transition: attaches the response served when the gate matches. */
     public final class Transition {
@@ -85,8 +104,7 @@ public final class ScenarioSpec {
 
         /** Completes the transition, moving the scenario to {@code toState}, and returns the updated scenario. */
         public ScenarioSpec goTo(String toState) {
-            Optional<String> required = fromState.equals(startState) ? Optional.empty() : Optional.of(fromState);
-            return withStub(stub.withScenarioTransition(name, required, toState).build());
+            return withTransition(new PendingTransition(fromState, stub, toState));
         }
     }
 }

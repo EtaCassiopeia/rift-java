@@ -97,6 +97,7 @@ class DslConstructTest {
 
     @Test
     void startsWithMatcherOnHeader() {
+        // withHeader binds under the "headers" request field — the shape the engine matches headers against.
         Predicate predicate = onRequest().withHeader("Authorization", startsWith("Bearer ")).build().predicates().get(0);
         PredicateOperation.StartsWith op = (PredicateOperation.StartsWith) predicate.operation();
         JsonValue headers = op.fields().get("headers");
@@ -136,6 +137,16 @@ class DslConstructTest {
     @Test
     void headerEqualsSugarStringOverload() {
         Predicate predicate = onRequest().withHeader("X-Trace", "abc").build().predicates().get(0);
+        PredicateOperation.Equals op = (PredicateOperation.Equals) predicate.operation();
+        JsonValue headers = op.fields().get("headers");
+        assertEquals(new JsonString("abc"), ((io.github.etacassiopeia.rift.json.JsonObject) headers).get("X-Trace"));
+    }
+
+    @Test
+    void standaloneHeaderBinderNestsUnderHeadersField() {
+        // The standalone header() field binder (for combinators) still produces the engine's real
+        // nested wire shape: {"headers": {name: value}}.
+        Predicate predicate = header("X-Trace", RiftDsl.equals("abc")).build();
         PredicateOperation.Equals op = (PredicateOperation.Equals) predicate.operation();
         JsonValue headers = op.fields().get("headers");
         assertEquals(new JsonString("abc"), ((io.github.etacassiopeia.rift.json.JsonObject) headers).get("X-Trace"));
@@ -320,18 +331,10 @@ class DslConstructTest {
     }
 
     @Test
-    void templateSetsRiftTemplatedFlag() {
-        Response.Is response = (Response.Is) ok().template().build();
+    void templatedSetsRiftTemplatedFlag() {
+        Response.Is response = (Response.Is) ok().templated().build();
         RiftResponseExtension rift = response.rift().orElseThrow();
         assertTrue(rift.templated());
-    }
-
-    @Test
-    void mutatingChainMethodsRejectNonIsResponse() {
-        ResponseSpec faultSpec = fault(Fault.CONNECTION_RESET_BY_PEER);
-        assertThrows(IllegalStateException.class, () -> faultSpec.withHeader("X", "1"));
-        assertThrows(IllegalStateException.class, () -> faultSpec.after(Duration.ofMillis(10)));
-        assertThrows(IllegalStateException.class, faultSpec::template);
     }
 
     // ------------------------------------------------------------------
@@ -382,8 +385,8 @@ class DslConstructTest {
     }
 
     @Test
-    void latencySpikeFaultIsRiftLatencyOnAnIsResponse() {
-        Response.Is response = (Response.Is) Fault.latencySpike(Duration.ofMillis(750)).build();
+    void latencyFaultIsRiftLatencyOnAnIsResponse() {
+        Response.Is response = (Response.Is) ok().withLatencyFault(1.0, Duration.ofMillis(750)).build();
         RiftResponseExtension rift = response.rift().orElseThrow();
         assertEquals(750L, rift.fault().orElseThrow().latency().orElseThrow().ms().orElseThrow());
     }
