@@ -5,6 +5,7 @@ import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.ImposterDefinition;
 import io.github.etacassiopeia.rift.model.Stub;
 import io.github.etacassiopeia.rift.verify.RequestMatch;
+import io.github.etacassiopeia.rift.verify.VerificationTimes;
 
 import java.net.URI;
 import java.util.List;
@@ -47,6 +48,15 @@ public interface Imposter {
     Space space(String flowId);
 
     FlowState flowState(String flowId);
+
+    /** Verifies at least one recorded request matched {@code match}'s predicates. */
+    void verify(RequestMatch match);
+
+    /** Verifies the number of recorded requests matching {@code match}'s predicates satisfies {@code times}. */
+    void verify(RequestMatch match, VerificationTimes times);
+
+    /** Verifies this imposter recorded no requests at all. */
+    void verifyNoInteractions();
 
     void enable();
 
