@@ -6,6 +6,8 @@ import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.ImposterDefinition;
 import io.github.etacassiopeia.rift.spawn.BinaryResolver;
 import io.github.etacassiopeia.rift.spawn.RiftProcess;
+import io.github.etacassiopeia.rift.transport.EmbeddedEngine;
+import io.github.etacassiopeia.rift.transport.EmbeddedEngineProvider;
 import io.github.etacassiopeia.rift.transport.RemoteTransport;
 import io.github.etacassiopeia.rift.transport.RiftTransport;
 
@@ -14,13 +16,14 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.ServiceLoader;
 
 /**
  * A client for a running rift engine's admin API. {@link #connect(URI)}/{@link
  * #connect(ConnectOptions)} talks to an already-running engine; {@link #spawn()}/{@link
  * #spawn(SpawnOptions)} additionally launches and owns the engine process's lifecycle. {@link
- * #embedded()} (issue #10, requires the {@code rift-java-embedded} module) is reserved but not yet
- * implemented.
+ * #embedded()}/{@link #embedded(EmbeddedOptions)} runs the engine in-process via the {@code
+ * rift-java-embedded} module (discovered through {@code ServiceLoader}), requiring JDK 22+.
  */
 public interface Rift extends AutoCloseable {
 
@@ -53,15 +56,27 @@ public interface Rift extends AutoCloseable {
     }
 
     static Rift embedded() {
-        throw new EngineUnavailable("embedded transport requires rift-java-embedded (issue #10)");
+        return embedded(EmbeddedOptions.builder().build());
     }
 
+    /**
+     * Starts a rift engine in-process (via the Panama FFM C-ABI, requires JDK 22+) and returns a
+     * client bound to it. The returned {@link Rift#close()} also stops the embedded engine and
+     * releases any native resources it holds.
+     */
     static Rift embedded(EmbeddedOptions options) {
-        throw new EngineUnavailable("embedded transport requires rift-java-embedded (issue #10)");
+        EmbeddedEngineProvider provider = ServiceLoader.load(EmbeddedEngineProvider.class).findFirst()
+                .orElseThrow(() -> new EngineUnavailable(
+                        "embedded transport requires rift-java-embedded on the classpath "
+                                + "(and a rift-java-natives classifier jar or -Drift.ffi.lib)"));
+        EmbeddedEngine engine = provider.start(options);
+        return RiftImpl.embedded(engine.transport(), options, engine.onClose());
     }
 
     static boolean isEmbeddedAvailable() {
-        return false;
+        return ServiceLoader.load(EmbeddedEngineProvider.class).findFirst()
+                .map(EmbeddedEngineProvider::isAvailable)
+                .orElse(false);
     }
 
     Imposter create(ImposterSpec spec);

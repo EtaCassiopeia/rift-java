@@ -68,6 +68,38 @@
               </sources>
             </configuration>
           </execution>
+          <execution>
+            <!-- Resources (e.g. the META-INF/services EmbeddedEngineProvider registration) aren't
+                 shared via add-source, so pull them in explicitly for this artifact too. -->
+            <id>add-resource</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>add-resource</goal>
+            </goals>
+            <configuration>
+              <resources>
+                <resource>
+                  <directory>${project.basedir}/../rift-java-embedded/src/main/resources</directory>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+          <execution>
+            <!-- Shared test resources (e.g. the fake native/<classifier>/librift_ffi.<ext> the
+                 resolver tests extract) aren't shared via add-test-source, so add them explicitly. -->
+            <id>add-test-resource</id>
+            <phase>generate-test-resources</phase>
+            <goals>
+              <goal>add-test-resource</goal>
+            </goals>
+            <configuration>
+              <resources>
+                <resource>
+                  <directory>${project.basedir}/../rift-java-embedded/src/test/resources</directory>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
       <plugin>
