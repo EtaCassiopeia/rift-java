@@ -1,0 +1,78 @@
+package io.github.etacassiopeia.rift.transport;
+
+import io.github.etacassiopeia.rift.json.JsonValue;
+
+import java.net.URI;
+import java.util.Optional;
+
+/**
+ * The internal SPI a {@code Rift} client speaks against: one call per admin-API operation, with
+ * bodies/results as raw {@link JsonValue} — the caller (in {@code io.github.etacassiopeia.rift})
+ * owns translating to/from the typed wire model. Implementations map every failure mode to the
+ * {@code io.github.etacassiopeia.rift.error} hierarchy; none of these methods throw a checked
+ * exception or return {@code null}.
+ *
+ * <p>{@link #close()} is idempotent and releases any transport-owned resources (e.g. an HTTP
+ * client, a spawned engine process).
+ */
+public interface RiftTransport extends AutoCloseable {
+
+    JsonValue createImposter(JsonValue def);
+
+    JsonValue getImposter(int port);
+
+    void deleteImposter(int port);
+
+    void deleteAll();
+
+    JsonValue listImposters(boolean replayable, boolean removeProxies);
+
+    void replaceAllImposters(JsonValue doc);
+
+    JsonValue applyConfig(JsonValue config);
+
+    void addStub(int port, JsonValue stub);
+
+    void replaceStubs(int port, JsonValue stubs);
+
+    void replaceStub(int port, StubAddress addr, JsonValue stub);
+
+    void deleteStub(int port, StubAddress addr);
+
+    JsonValue recorded(int port);
+
+    void clearRecorded(int port);
+
+    void clearProxyResponses(int port);
+
+    void enable(int port);
+
+    void disable(int port);
+
+    JsonValue scenarios(int port, Optional<String> flowId);
+
+    void setScenarioState(int port, String name, String state);
+
+    void resetScenarios(int port);
+
+    Optional<JsonValue> flowStateGet(int port, String flowId, String key);
+
+    void flowStatePut(int port, String flowId, String key, JsonValue value);
+
+    void flowStateDelete(int port, String flowId, String key);
+
+    void spaceAddStub(int port, String flowId, JsonValue stub);
+
+    JsonValue spaceListStubs(int port, String flowId);
+
+    JsonValue spaceRecorded(int port, String flowId);
+
+    void spaceDelete(int port, String flowId);
+
+    JsonValue buildInfo();
+
+    URI adminUri();
+
+    @Override
+    void close();
+}
