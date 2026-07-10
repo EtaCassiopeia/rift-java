@@ -1,5 +1,7 @@
 package io.github.etacassiopeia.rift;
 
+import io.github.etacassiopeia.rift.codec.BodyCodecs;
+import io.github.etacassiopeia.rift.codec.RiftBodyCodec;
 import io.github.etacassiopeia.rift.json.JsonArray;
 import io.github.etacassiopeia.rift.json.JsonObject;
 import io.github.etacassiopeia.rift.json.JsonString;
@@ -68,9 +70,19 @@ public record RecordedRequest(
         }
         try {
             return Optional.of(JsonValue.parse(body));
-        } catch (RuntimeException e) {
+        } catch (io.github.etacassiopeia.rift.json.JsonParseException e) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * Decodes the request body as {@code type}, via the registered {@link RiftBodyCodec} (see
+     * {@code RiftDsl.useBodyCodec}). The codec is resolved before parsing the body, so a missing
+     * codec fails loudly with the artifact-naming message rather than after doing needless work.
+     */
+    public <T> T bodyAs(Class<T> type) {
+        RiftBodyCodec codec = BodyCodecs.resolve();
+        return codec.fromJson(bodyAsJson().orElseGet(() -> new JsonString(body)), type);
     }
 
     private static Optional<String> stringField(JsonObject obj, String key) {

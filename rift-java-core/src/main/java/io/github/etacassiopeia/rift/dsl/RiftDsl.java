@@ -1,5 +1,7 @@
 package io.github.etacassiopeia.rift.dsl;
 
+import io.github.etacassiopeia.rift.codec.BodyCodecs;
+import io.github.etacassiopeia.rift.codec.RiftBodyCodec;
 import io.github.etacassiopeia.rift.json.JsonBool;
 import io.github.etacassiopeia.rift.json.JsonObject;
 import io.github.etacassiopeia.rift.json.JsonString;
@@ -139,6 +141,14 @@ public final class RiftDsl {
         return equals(value);
     }
 
+    /**
+     * An {@code equals} match against {@code pojo}, serialized to JSON by the registered {@link
+     * RiftBodyCodec} (see {@link #useBodyCodec}).
+     */
+    public static Matcher equalTo(Object pojo) {
+        return equalTo(BodyCodecs.resolve().toJson(pojo));
+    }
+
     /** A {@code deepEquals} match against the literal string {@code value} (exact match, no partial-object semantics). */
     public static Matcher deepEquals(String value) {
         return Matcher.create(Matcher.Kind.DEEP_EQUALS, new JsonString(value));
@@ -147,6 +157,14 @@ public final class RiftDsl {
     /** A {@code deepEquals} match against the literal JSON value {@code value}. */
     public static Matcher deepEquals(JsonValue value) {
         return Matcher.create(Matcher.Kind.DEEP_EQUALS, value);
+    }
+
+    /**
+     * A {@code deepEquals} match against {@code pojo}, serialized to JSON by the registered {@link
+     * RiftBodyCodec} (see {@link #useBodyCodec}).
+     */
+    public static Matcher deepEquals(Object pojo) {
+        return deepEquals(BodyCodecs.resolve().toJson(pojo));
     }
 
     /** A {@code contains} (substring / partial-object) match against the literal string {@code value}. */
@@ -265,6 +283,14 @@ public final class RiftDsl {
     /** A 200 response with a {@code Content-Type: application/json} header and the body parsed from {@code jsonText}. */
     public static IsSpec okJson(String jsonText) {
         return okJson(json(jsonText));
+    }
+
+    /**
+     * A 200 response with a {@code Content-Type: application/json} header and the body serialized
+     * from {@code pojo} by the registered {@link RiftBodyCodec} (see {@link #useBodyCodec}).
+     */
+    public static IsSpec okJson(Object pojo) {
+        return okJson(BodyCodecs.resolve().toJson(pojo));
     }
 
     /** A bare 201 response, with no headers or body. */
@@ -407,6 +433,20 @@ public final class RiftDsl {
     /** Expect zero matching requests. */
     public static VerificationTimes never() {
         return VerificationTimes.never();
+    }
+
+    // ------------------------------------------------------------------
+    // Body codec (SPI)
+    // ------------------------------------------------------------------
+
+    /**
+     * Registers {@code codec} as the explicit {@link RiftBodyCodec} used by the {@code Object}-typed
+     * DSL overloads ({@link #okJson(Object)}, {@link #equalTo(Object)}, {@link #deepEquals(Object)},
+     * {@code IsSpec.withBodyFromCodec}, {@code RecordedRequest.bodyAs}), overriding {@code
+     * ServiceLoader} discovery. Passing {@code null} resets to auto-discovery.
+     */
+    public static void useBodyCodec(RiftBodyCodec codec) {
+        BodyCodecs.explicit = codec;
     }
 
     // ------------------------------------------------------------------

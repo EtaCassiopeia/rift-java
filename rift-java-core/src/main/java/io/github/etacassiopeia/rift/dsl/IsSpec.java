@@ -1,5 +1,6 @@
 package io.github.etacassiopeia.rift.dsl;
 
+import io.github.etacassiopeia.rift.codec.BodyCodecs;
 import io.github.etacassiopeia.rift.json.JsonArray;
 import io.github.etacassiopeia.rift.json.JsonString;
 import io.github.etacassiopeia.rift.json.JsonValue;
@@ -84,6 +85,14 @@ public final class IsSpec implements ResponseSpec {
     /** Sets the response body by parsing {@code jsonText} as JSON. */
     public IsSpec withJsonBody(String jsonText) {
         return withJsonBody(RiftDsl.json(jsonText));
+    }
+
+    /**
+     * Sets the response body to {@code pojo}, serialized to JSON by the registered {@link
+     * io.github.etacassiopeia.rift.codec.RiftBodyCodec} (see {@link RiftDsl#useBodyCodec}).
+     */
+    public IsSpec withBodyFromCodec(Object pojo) {
+        return withJsonBody(BodyCodecs.resolve().toJson(pojo));
     }
 
     /**
