@@ -55,6 +55,14 @@
       <scope>provided</scope>
     </dependency>
 
+    <!-- ParameterResolver + @ExtendWith for @InjectImposter/@InjectRift parameter injection.
+         Provided: consumers already run JUnit 5; keep it off the transitive runtime classpath. -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
     <!-- Tests: full Boot slice to exercise @SpringBootTest + @ConfigurationProperties binding. -->
     <dependency>
       <groupId>org.junit.jupiter</groupId>

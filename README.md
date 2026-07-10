@@ -131,12 +131,18 @@ import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
 @EnableRift
 @ConfigureImposter(name = "users", baseUrlProperty = "users.base-url")
 class UserClientTest {
-    @InjectImposter("users") Imposter users;
+    @InjectImposter("users") Imposter users;    // field injection
 
     @Test
     void fetchesUser() {
         users.addStub(onGet("/api/users/1").willReturn(okJson("{\"id\":1}")));
         users.verify(onGet("/api/users/1"), times(1));
+    }
+
+    // or as method parameters — zero-config, no extra @ExtendWith
+    @Test
+    void fetchesUserByParam(@InjectImposter("users") Imposter users, @InjectRift Rift rift) {
+        users.addStub(onGet("/api/users/2").willReturn(okJson("{\"id\":2}")));
     }
 }
 ```

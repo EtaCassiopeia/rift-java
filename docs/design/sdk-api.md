@@ -601,6 +601,11 @@ class OrderServiceIT {
     // … drive the app; its user-client.base-url already points at the imposter …
     users.verify(onGet("/api/users/1"), times(1));
   }
+
+  // parameter injection (equivalent) — zero-config via @EnableRift's @ExtendWith meta-annotation
+  @Test void ordersCallPayments(@InjectImposter("payments") Imposter payments, @InjectRift Rift r) {
+    payments.addStub(onPost("/pay").willReturn(created()));
+  }
 }
 ```
 
@@ -612,7 +617,9 @@ Implementation contract (so the implementer has zero decisions):
   optional `portProperty`). Same-named config across test classes → same cache key → context
   reuse is preserved (the wiremock-spring-boot lesson: never pollute the context with beans).
 - A `TestExecutionListener` resets per test method (same semantics as JUnit5 `Reset.PER_TEST`)
-  and handles `@InjectImposter`/`@InjectRift` field injection.
+  and handles `@InjectImposter`/`@InjectRift` field injection; a `RiftParameterResolver`
+  (auto-registered by `@ExtendWith` meta-annotated on `@EnableRift`) handles the same
+  annotations as `@Test`/lifecycle method parameters — no extra `@ExtendWith` required.
 - Engine shutdown via context-closed event.
 - No Spring beans are added to the user's context; the module depends only on
   `spring-test`/`spring-context` (provided scope) + core.
