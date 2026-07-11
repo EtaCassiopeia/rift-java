@@ -26,9 +26,10 @@ class RiftProcessTest {
                 .logLevel("info")
                 .build();
 
-        List<String> cmd = RiftProcess.buildCommand(Path.of("/usr/bin/rift"), opts, 2525, Path.of("/tmp/rift.pid"));
+        Path binaryPath = Path.of("/usr/bin/rift");
+        List<String> cmd = RiftProcess.buildCommand(binaryPath, opts, 2525, Path.of("/tmp/rift.pid"));
 
-        assertEquals("/usr/bin/rift", cmd.get(0), "the binary is argv[0]");
+        assertEquals(binaryPath.toString(), cmd.get(0), "the binary is argv[0]");
         assertEquals("start", cmd.get(cmd.size() - 1), "the start subcommand must be last");
 
         int start = cmd.indexOf("start");
