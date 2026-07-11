@@ -6,10 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Proxy responses do not appear in any corpus fixture, so this is a hand-written spec-derived
- * round-trip test (G2 + G3) covering every {@code ProxyResponse} field, including the four that
- * the engine always serializes (mode/predicateGenerators/addWaitBehavior/injectHeaders) even at
- * their default value — this test's input already carries all four so the round trip is exact.
+ * Round-trip test (G2 + G3) for {@code ProxyResponse}. The {@code JSON} fixture carries every field
+ * so the full-field round trip is exact; {@link #minimalProxyRoundTrips} covers the engine's minimal
+ * form (corpus 07), where {@code addWaitBehavior} (false) and {@code injectHeaders} (empty) are
+ * omitted on the wire and so must not be re-injected on write (issue #56).
  */
 class ProxyResponseRoundTripTest {
 
@@ -32,9 +32,71 @@ class ProxyResponseRoundTripTest {
             }
             """;
 
+    private static final String MINIMAL_JSON = """
+            {
+              "predicates": [{"equals": {"path": "/orders"}}],
+              "responses": [
+                {
+                  "proxy": {
+                    "to": "http://localhost:4501",
+                    "mode": "proxyOnce",
+                    "predicateGenerators": [{"matches": {"method": true, "path": true}}]
+                  }
+                }
+              ]
+            }
+            """;
+
     @Test
     void proxyResponseRoundTrips() {
         RoundTripAssertions.assertRoundTrips(JSON, Stub::fromJson, Stub::toJson);
+    }
+
+    @Test
+    void minimalProxyRoundTrips() {
+        // Corpus 07 shape: no addWaitBehavior, no injectHeaders — serialization must not inject them.
+        RoundTripAssertions.assertRoundTrips(MINIMAL_JSON, Stub::fromJson, Stub::toJson);
+    }
+
+    private static final String WAIT_ONLY_JSON = """
+            {
+              "predicates": [{"equals": {"path": "/orders"}}],
+              "responses": [
+                {
+                  "proxy": {
+                    "to": "http://localhost:4501",
+                    "mode": "proxyOnce",
+                    "predicateGenerators": [{"matches": {"path": true}}],
+                    "addWaitBehavior": true
+                  }
+                }
+              ]
+            }
+            """;
+
+    private static final String HEADERS_ONLY_JSON = """
+            {
+              "predicates": [{"equals": {"path": "/orders"}}],
+              "responses": [
+                {
+                  "proxy": {
+                    "to": "http://localhost:4501",
+                    "mode": "proxyOnce",
+                    "predicateGenerators": [{"matches": {"path": true}}],
+                    "injectHeaders": {"X-Forwarded-By": "rift"}
+                  }
+                }
+              ]
+            }
+            """;
+
+    @Test
+    void mixedToggleProxiesRoundTrip() {
+        // The two omit-at-default fields are gated by independent conditions: addWaitBehavior=true with
+        // no injectHeaders, and injectHeaders present with addWaitBehavior=false, must each round-trip
+        // without the other field being injected.
+        RoundTripAssertions.assertRoundTrips(WAIT_ONLY_JSON, Stub::fromJson, Stub::toJson);
+        RoundTripAssertions.assertRoundTrips(HEADERS_ONLY_JSON, Stub::fromJson, Stub::toJson);
     }
 
     @Test

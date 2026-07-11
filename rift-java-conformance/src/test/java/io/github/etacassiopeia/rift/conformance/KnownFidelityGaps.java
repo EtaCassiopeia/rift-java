@@ -21,9 +21,10 @@ final class KnownFidelityGaps {
 
     /** Fixture number → the core issue tracking why it cannot round-trip yet. */
     private static final Map<Integer, String> GAPS = Map.of(
-            20, "#56",  // `wait` string-form now parses (#55); remaining round-trip gap is proxy/fault serialization
-            4, "#56",   // latency fault emits default minMs/maxMs:0 alongside fixed `ms`
-            7, "#56");  // proxy response emits default addWaitBehavior
+            // Remaining gaps are string-typed statusCode ("200"), dropped `_mode`, the `behaviors`
+            // array form, and a null `proxy` alongside `is` — none of which are the latency/proxy
+            // default-field scope of #56; tracked separately by #60.
+            20, "#60");
 
     private KnownFidelityGaps() {}
 

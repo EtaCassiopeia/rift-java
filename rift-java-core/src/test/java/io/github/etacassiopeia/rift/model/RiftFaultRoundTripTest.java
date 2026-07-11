@@ -10,11 +10,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * an error fault, and a raw TCP fault — plus the {@code _rift.templated} flag. None of this appears
  * in any corpus fixture; hand-written spec-derived round-trip test (G2 + G3).
  *
- * <p>The fixed-{@code ms} case pins {@code minMs}/{@code maxMs} to their already-serialized-default
- * value ({@code 0}) rather than omitting them: {@code RiftLatencyFault} always writes both fields
- * (mirroring the engine's own {@code #[serde(default)]} without {@code skip_serializing_if}), so an
- * input that omitted them would gain them on write and fail the G3 semantic-tree gate — not a wire
- * model defect, just a value chosen to already match the field's canonical wire form.
+ * <p>Latency has two mutually-exclusive wire forms: a fixed {@code ms} delay, or a {@code
+ * minMs}/{@code maxMs} range. Serialization emits only the form that was parsed — the fixed form
+ * writes {@code {probability, ms}} (no {@code minMs}/{@code maxMs}), the range form writes {@code
+ * {probability, minMs, maxMs}} (no {@code ms}) — so both round-trip exactly (issue #56, corpus 04).
  */
 class RiftFaultRoundTripTest {
 
@@ -39,7 +38,7 @@ class RiftFaultRoundTripTest {
               "responses": [
                 {
                   "is": {"statusCode": 200},
-                  "_rift": {"fault": {"latency": {"probability": 0.5, "minMs": 0, "maxMs": 0, "ms": 250}}}
+                  "_rift": {"fault": {"latency": {"probability": 0.5, "ms": 250}}}
                 }
               ]
             }

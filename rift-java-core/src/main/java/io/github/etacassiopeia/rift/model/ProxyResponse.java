@@ -15,11 +15,10 @@ import java.util.Set;
 
 /**
  * A proxy response: forwards the matched request to an upstream and (optionally) records the
- * result as a new stub. {@code mode}, {@code predicateGenerators}, {@code addWaitBehavior} and
- * {@code injectHeaders} are always present on the wire, even at their default/empty value — this
- * mirrors the engine's own serialization, which has no {@code skip_serializing_if} on those
- * fields (unlike {@code addDecorateBehavior} and {@code pathRewrite}, which are omitted when
- * absent).
+ * result as a new stub. {@code to}, {@code mode} and {@code predicateGenerators} are always present
+ * on the wire. {@code addWaitBehavior} (when false), {@code injectHeaders} (when empty), {@code
+ * addDecorateBehavior} and {@code pathRewrite} are omitted at their default/empty value, mirroring
+ * the engine's own {@code skip_serializing_if} serialization (issue #56, corpus 07).
  *
  * <p>{@code extra} carries any wire keys not modeled above, so unknown/future engine fields survive
  * a parse → serialize round-trip instead of being dropped (re-emitted after the modeled keys, in
@@ -94,10 +93,14 @@ public record ProxyResponse(
         builder.put("to", new JsonString(to));
         builder.put("mode", new JsonString(mode));
         builder.put("predicateGenerators", new JsonArray(predicateGenerators));
-        builder.put("addWaitBehavior", JsonBool.of(addWaitBehavior));
-        JsonObject.Builder injectHeadersBuilder = JsonObject.builder();
-        injectHeaders.forEach((k, v) -> injectHeadersBuilder.put(k, new JsonString(v)));
-        builder.put("injectHeaders", injectHeadersBuilder.build());
+        if (addWaitBehavior) {
+            builder.put("addWaitBehavior", JsonBool.of(true));
+        }
+        if (!injectHeaders.isEmpty()) {
+            JsonObject.Builder injectHeadersBuilder = JsonObject.builder();
+            injectHeaders.forEach((k, v) -> injectHeadersBuilder.put(k, new JsonString(v)));
+            builder.put("injectHeaders", injectHeadersBuilder.build());
+        }
         addDecorateBehavior.ifPresent(v -> builder.put("addDecorateBehavior", new JsonString(v)));
         pathRewrite.ifPresent(v -> builder.put("pathRewrite", v.toJsonValue()));
         extra.forEach(builder::put);

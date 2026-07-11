@@ -25,9 +25,15 @@ public record RiftLatencyFault(double probability, long minMs, long maxMs, Optio
     JsonObject toJsonValue() {
         JsonObject.Builder builder = JsonObject.builder();
         builder.put("probability", JsonNumber.of(probability));
-        builder.put("minMs", JsonNumber.of(minMs));
-        builder.put("maxMs", JsonNumber.of(maxMs));
-        ms.ifPresent(v -> builder.put("ms", JsonNumber.of(v)));
+        // The two forms are mutually exclusive on the wire: a fixed `ms` delay, or a `minMs`/`maxMs`
+        // range. Emit only the parsed form so an input carrying just one does not gain the other's
+        // fields on write (issue #56).
+        if (ms.isPresent()) {
+            builder.put("ms", JsonNumber.of(ms.get()));
+        } else {
+            builder.put("minMs", JsonNumber.of(minMs));
+            builder.put("maxMs", JsonNumber.of(maxMs));
+        }
         return builder.build();
     }
 }
