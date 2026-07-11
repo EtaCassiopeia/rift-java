@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -86,6 +87,49 @@ final class Corpus {
     /** The {@code corpus/} payload directory — the replayer's working directory (contract: cwd = corpus/). */
     Path payloadRoot() {
         return home.resolve("corpus");
+    }
+
+    /**
+     * Absolutizes a fixture's relative {@code fromDataSource.csv.path} against {@code payloadRoot}.
+     *
+     * <p>The spawn transport sets the engine's working directory to {@code corpus/}, so a fixture's
+     * {@code "path": "data/products.csv"} resolves. The embedded engine runs in-process and inherits
+     * the JVM working directory instead, so the same relative path would not resolve — this rewrites
+     * it to an absolute path under the corpus root. The walk is typed (it only touches a {@code path}
+     * inside a {@code fromDataSource.csv} object) and leaves already-absolute paths and lookalike
+     * strings elsewhere untouched.
+     */
+    static JsonValue rewriteForEmbedded(JsonValue imposter, Path payloadRoot) {
+        return rewriteNode(imposter, payloadRoot);
+    }
+
+    private static JsonValue rewriteNode(JsonValue node, Path payloadRoot) {
+        if (node instanceof JsonArray arr) {
+            return JsonArray.of(arr.items().stream().map(item -> rewriteNode(item, payloadRoot)).toList());
+        }
+        if (node instanceof JsonObject obj) {
+            Map<String, JsonValue> fields = new java.util.LinkedHashMap<>();
+            obj.fields().forEach((key, value) -> fields.put(key,
+                    key.equals("fromDataSource") ? rewriteDataSource(value, payloadRoot) : rewriteNode(value, payloadRoot)));
+            return new JsonObject(fields);
+        }
+        return node;
+    }
+
+    private static JsonValue rewriteDataSource(JsonValue dataSource, Path payloadRoot) {
+        if (!(dataSource instanceof JsonObject ds) || !(ds.get("csv") instanceof JsonObject csv)
+                || !(csv.get("path") instanceof JsonString pathValue)) {
+            return rewriteNode(dataSource, payloadRoot);
+        }
+        Path path = Path.of(pathValue.value());
+        if (path.isAbsolute()) {
+            return dataSource;
+        }
+        Map<String, JsonValue> csvFields = new java.util.LinkedHashMap<>(csv.fields());
+        csvFields.put("path", new JsonString(payloadRoot.resolve(path).toString()));
+        Map<String, JsonValue> dsFields = new java.util.LinkedHashMap<>(ds.fields());
+        dsFields.put("csv", new JsonObject(csvFields));
+        return new JsonObject(dsFields);
     }
 
     /** The fixtures declared by the manifest, in declared order. */
