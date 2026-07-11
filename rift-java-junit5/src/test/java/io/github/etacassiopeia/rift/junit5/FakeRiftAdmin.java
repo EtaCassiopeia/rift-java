@@ -81,7 +81,7 @@ final class FakeRiftAdmin implements AutoCloseable {
 
     private String route(String method, String path) {
         if (path.equals("/config")) {
-            return "{\"version\":\"0.12.0\",\"commit\":\"test\"}";
+            return "{\"version\":\"0.13.1\",\"commit\":\"test\"}";
         }
         if (path.equals("/imposters") && method.equals("POST")) {
             int port = nextPort.getAndIncrement();

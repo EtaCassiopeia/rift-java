@@ -184,10 +184,10 @@ class RemoteTransportCoverageTest {
     @Test
     void infoParsesEngineInfo() {
         try (FakeAdminServer s = new FakeAdminServer()) {
-            s.respond("GET /config", 200, "{\"version\":\"0.12.0\",\"commit\":\"abc\",\"options\":{\"features\":[]}}");
+            s.respond("GET /config", 200, "{\"version\":\"0.13.1\",\"commit\":\"abc\",\"options\":{\"features\":[]}}");
             try (Rift rift = connect(s)) {
                 EngineInfo info = rift.info();
-                assertEquals("0.12.0", info.version());
+                assertEquals("0.13.1", info.version());
                 assertEquals("abc", info.commit());
             }
         }
