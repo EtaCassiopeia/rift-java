@@ -1,11 +1,15 @@
 package io.github.etacassiopeia.rift.model;
 
+import io.github.etacassiopeia.rift.json.JsonNumber;
 import io.github.etacassiopeia.rift.json.JsonString;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -82,5 +86,100 @@ class ResponseFieldPreservationTest {
                 Stub.fromJson(stub.toJson()).responses().get(0));
         assertTrue(reparsed.extra().containsKey("_behaviors"));
         assertEquals("value", ((JsonString) reparsed.extra().get("someFutureKey")).value());
+    }
+
+    @Test
+    void proxyPreservesSiblingKeys() {
+        // #62: a proxy response with co-present top-level keys (_behaviors, unknown/future) must not
+        // drop them — they round-trip via Response.Proxy.extra.
+        Stub stub = Stub.fromJson("""
+                {"predicates": [], "responses": [
+                  {"proxy": {"to": "http://up"}, "_behaviors": {"wait": 100}, "someFutureKey": "value"}]}
+                """);
+        Response.Proxy proxy = assertInstanceOf(Response.Proxy.class, stub.responses().get(0));
+        assertEquals("http://up", proxy.proxy().to());
+        assertTrue(proxy.extra().containsKey("_behaviors"));
+        assertEquals("value", ((JsonString) proxy.extra().get("someFutureKey")).value());
+
+        Response.Proxy reparsed = assertInstanceOf(Response.Proxy.class,
+                Stub.fromJson(stub.toJson()).responses().get(0));
+        assertTrue(reparsed.extra().containsKey("_behaviors"));
+        assertEquals("value", ((JsonString) reparsed.extra().get("someFutureKey")).value());
+    }
+
+    @Test
+    void injectPreservesSiblingKeys() {
+        // #62: an inject response with a co-present unknown key must not drop it.
+        Stub stub = Stub.fromJson("""
+                {"predicates": [], "responses": [
+                  {"inject": "function(){}", "repeat": 3}]}
+                """);
+        Response.Inject inject = assertInstanceOf(Response.Inject.class, stub.responses().get(0));
+        assertEquals("function(){}", inject.script());
+        assertTrue(inject.extra().containsKey("repeat"));
+
+        Response.Inject reparsed = assertInstanceOf(Response.Inject.class,
+                Stub.fromJson(stub.toJson()).responses().get(0));
+        assertEquals("function(){}", reparsed.script());
+        assertTrue(reparsed.extra().containsKey("repeat"));
+    }
+
+    @Test
+    void faultPreservesSiblingKeys() {
+        // #62: a fault response with a co-present unknown key must not drop it.
+        Stub stub = Stub.fromJson("""
+                {"predicates": [], "responses": [
+                  {"fault": "CONNECTION_RESET_BY_PEER", "someFutureKey": "value"}]}
+                """);
+        Response.Fault fault = assertInstanceOf(Response.Fault.class, stub.responses().get(0));
+        assertEquals("CONNECTION_RESET_BY_PEER", fault.fault());
+        assertEquals("value", ((JsonString) fault.extra().get("someFutureKey")).value());
+
+        Response.Fault reparsed = assertInstanceOf(Response.Fault.class,
+                Stub.fromJson(stub.toJson()).responses().get(0));
+        assertEquals("CONNECTION_RESET_BY_PEER", reparsed.fault());
+        assertEquals("value", ((JsonString) reparsed.extra().get("someFutureKey")).value());
+    }
+
+    @Test
+    void proxyPreservesRiftSibling() {
+        // The issue's own example: a `_rift` sibling on a proxy (special-cased for is/script kinds)
+        // must round-trip via extra like any other sibling, not be dropped.
+        Stub stub = Stub.fromJson("""
+                {"predicates": [], "responses": [
+                  {"proxy": {"to": "http://up"}, "_rift": {"templated": true}}]}
+                """);
+        Response.Proxy proxy = assertInstanceOf(Response.Proxy.class, stub.responses().get(0));
+        assertTrue(proxy.extra().containsKey("_rift"));
+
+        Response.Proxy reparsed = assertInstanceOf(Response.Proxy.class,
+                Stub.fromJson(stub.toJson()).responses().get(0));
+        assertTrue(reparsed.extra().containsKey("_rift"));
+    }
+
+    @Test
+    void proxyInjectFaultRejectModeledKeyInExtra() {
+        // The compact constructors reject their own modeled key sneaking into extra (a precedence
+        // ambiguity), matching IsResponse/ProxyResponse — see UnknownFieldPreservationTest.
+        assertThrows(WireFormatException.class,
+                () -> new Response.Proxy(new ProxyResponse("http://up"), Map.of("proxy", JsonNumber.of(1))));
+        assertThrows(WireFormatException.class,
+                () -> new Response.Inject("function(){}", Map.of("inject", JsonNumber.of(1))));
+        assertThrows(WireFormatException.class,
+                () -> new Response.Fault("CONNECTION_RESET_BY_PEER", Map.of("fault", JsonNumber.of(1))));
+    }
+
+    @Test
+    void bareProxyInjectFaultHaveEmptyExtra() {
+        // Regression: the common no-sibling case carries an empty extra and is otherwise unchanged.
+        Stub stub = Stub.fromJson("""
+                {"predicates": [], "responses": [
+                  {"proxy": {"to": "http://up"}},
+                  {"inject": "function(){}"},
+                  {"fault": "CONNECTION_RESET_BY_PEER"}]}
+                """);
+        assertTrue(assertInstanceOf(Response.Proxy.class, stub.responses().get(0)).extra().isEmpty());
+        assertTrue(assertInstanceOf(Response.Inject.class, stub.responses().get(1)).extra().isEmpty());
+        assertTrue(assertInstanceOf(Response.Fault.class, stub.responses().get(2)).extra().isEmpty());
     }
 }
