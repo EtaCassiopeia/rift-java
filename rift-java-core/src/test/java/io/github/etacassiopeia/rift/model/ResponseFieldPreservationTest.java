@@ -1,10 +1,13 @@
 package io.github.etacassiopeia.rift.model;
 
+import io.github.etacassiopeia.rift.json.JsonNull;
 import io.github.etacassiopeia.rift.json.JsonNumber;
 import io.github.etacassiopeia.rift.json.JsonString;
+import io.github.etacassiopeia.rift.json.JsonValue;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -181,5 +184,108 @@ class ResponseFieldPreservationTest {
         assertTrue(assertInstanceOf(Response.Proxy.class, stub.responses().get(0)).extra().isEmpty());
         assertTrue(assertInstanceOf(Response.Inject.class, stub.responses().get(1)).extra().isEmpty());
         assertTrue(assertInstanceOf(Response.Fault.class, stub.responses().get(2)).extra().isEmpty());
+    }
+
+    @Test
+    void wrappedIsPreservesTopLevelSiblingKeys() {
+        // #66: unknown top-level keys beside a WRAPPED is:{} must round-trip via Response.Is.extra
+        // (two keys — also guards against clobbering when more than one sibling is present).
+        Stub stub = Stub.fromJson("""
+                {"predicates": [], "responses": [
+                  {"is": {"statusCode": 200}, "someTopLevelUnknownKey": "value", "anotherKey": "two"}]}
+                """);
+        Response.Is is = assertInstanceOf(Response.Is.class, stub.responses().get(0));
+        assertEquals("value", ((JsonString) is.extra().get("someTopLevelUnknownKey")).value());
+        assertEquals("two", ((JsonString) is.extra().get("anotherKey")).value());
+
+        Response.Is reparsed = assertInstanceOf(Response.Is.class,
+                Stub.fromJson(stub.toJson()).responses().get(0));
+        assertEquals("value", ((JsonString) reparsed.extra().get("someTopLevelUnknownKey")).value());
+        assertEquals("two", ((JsonString) reparsed.extra().get("anotherKey")).value());
+    }
+
+    @Test
+    void wrappedIsNoSiblingsHasEmptyExtra() {
+        // Regression: the common no-sibling wrapped-is carries an empty top-level extra.
+        Stub stub = Stub.fromJson("""
+                {"predicates": [], "responses": [{"is": {"statusCode": 200}}]}
+                """);
+        assertTrue(assertInstanceOf(Response.Is.class, stub.responses().get(0)).extra().isEmpty());
+    }
+
+    @Test
+    void wrappedIsBehaviorsArrayFormStaysTyped() {
+        // The `behaviors` ARRAY form (engine GET /imposters output) is a typed sibling, excluded from
+        // extra — guards the "behaviors" entry in the reject/strip set against silent duplication.
+        Stub stub = Stub.fromJson("""
+                {"predicates": [], "responses": [
+                  {"is": {"statusCode": 200}, "behaviors": [{"wait": 100}]}]}
+                """);
+        Response.Is is = assertInstanceOf(Response.Is.class, stub.responses().get(0));
+        assertFalse(is.behaviors().isEmpty(), "behaviors array is a typed component");
+        assertFalse(is.extra().containsKey("behaviors"), "behaviors must not be duplicated into extra");
+    }
+
+    @Test
+    void wrappedIsPreservesNullProxySibling() {
+        // #60 sub-gap D: fixture-20 shape `{"is":{…}, "proxy": null}` — the null proxy sibling must
+        // round-trip (JsonNull preserved), not be dropped.
+        Stub stub = Stub.fromJson("""
+                {"predicates": [], "responses": [
+                  {"is": {"statusCode": 200}, "proxy": null}]}
+                """);
+        Response.Is is = assertInstanceOf(Response.Is.class, stub.responses().get(0));
+        assertInstanceOf(JsonNull.class, is.extra().get("proxy"));
+
+        Response.Is reparsed = assertInstanceOf(Response.Is.class,
+                Stub.fromJson(stub.toJson()).responses().get(0));
+        assertInstanceOf(JsonNull.class, reparsed.extra().get("proxy"));
+    }
+
+    @Test
+    void wrappedIsWithBehaviorsAndRiftKeepsThemTyped() {
+        // _behaviors/_rift stay TYPED components, never duplicated into extra; only the truly unknown
+        // key lands in extra.
+        Stub stub = Stub.fromJson("""
+                {"predicates": [], "responses": [
+                  {"is": {"statusCode": 200}, "_behaviors": {"wait": 100}, "_rift": {"templated": true}, "future": "x"}]}
+                """);
+        Response.Is is = assertInstanceOf(Response.Is.class, stub.responses().get(0));
+        assertFalse(is.behaviors().isEmpty(), "_behaviors is a typed component");
+        assertTrue(is.rift().orElseThrow().templated(), "_rift is a typed component");
+        assertFalse(is.extra().containsKey("_behaviors"));
+        assertFalse(is.extra().containsKey("_rift"));
+        assertEquals("x", ((JsonString) is.extra().get("future")).value());
+
+        Response.Is reparsed = assertInstanceOf(Response.Is.class,
+                Stub.fromJson(stub.toJson()).responses().get(0));
+        assertFalse(reparsed.behaviors().isEmpty());
+        assertTrue(reparsed.rift().orElseThrow().templated());
+        assertEquals("x", ((JsonString) reparsed.extra().get("future")).value());
+    }
+
+    @Test
+    void flatFormKeepsUnknownsInsideIs() {
+        // The flat/recorded form is unchanged: its top-level extra stays empty; unknowns are preserved
+        // inside IsResponse.extra (re-emitted inside the canonical is:{}), not promoted to top level.
+        Stub stub = Stub.fromJson("""
+                {"predicates": [], "responses": [
+                  {"statusCode": 200, "future": "x"}]}
+                """);
+        Response.Is is = assertInstanceOf(Response.Is.class, stub.responses().get(0));
+        assertTrue(is.extra().isEmpty(), "flat form has no top-level extra");
+        assertTrue(is.is().extra().containsKey("future"), "flat unknown stays inside IsResponse.extra");
+    }
+
+    @Test
+    void isRejectsModeledKeyInExtra() {
+        // Every modeled key (is/_behaviors/behaviors/_rift) in the top-level extra is a precedence
+        // ambiguity — rejected at construction, matching the other kinds.
+        for (String modeled : java.util.List.of("is", "_behaviors", "behaviors", "_rift")) {
+            assertThrows(WireFormatException.class,
+                    () -> new Response.Is(new IsResponse("200"), Behaviors.EMPTY, Optional.empty(),
+                            Map.<String, JsonValue>of(modeled, JsonNumber.of(1))),
+                    "extra must reject modeled key " + modeled);
+        }
     }
 }

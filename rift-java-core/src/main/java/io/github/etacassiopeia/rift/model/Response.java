@@ -18,17 +18,31 @@ import java.util.Set;
  * extension) reads as an {@code is} response, normalized to the canonical {@code is:{}} shape. Any
  * other object — no known kind, no flat fields — also reads as an {@code is} response, preserving
  * its unknown keys via {@link IsResponse#extra} rather than dropping them. The {@code proxy}/{@code
- * inject}/{@code fault}/script-only kinds each carry an {@code extra} escape hatch for co-present
- * sibling top-level keys so they are not dropped. (A genuinely unknown top-level key sitting beside a
- * <em>wrapped</em> {@code is:{}} object is not yet captured — tracked by #66.)
+ * inject}/{@code fault}/script-only kinds — and the wrapped {@code is} form — each carry an {@code
+ * extra} escape hatch for co-present sibling top-level keys, so no kind silently drops data.
  */
 public sealed interface Response {
 
-    record Is(IsResponse is, Behaviors behaviors, Optional<RiftResponseExtension> rift) implements Response {
+    /**
+     * A literal ("is") response. {@code extra} carries any top-level wire keys that sat alongside a
+     * <em>wrapped</em> {@code is:{}} (e.g. an unknown/future key, or a {@code proxy:null} Mimeo-compat
+     * sibling) so they survive a parse → serialize round-trip instead of being dropped. The typed
+     * siblings ({@code _behaviors}/{@code behaviors}/{@code _rift}) and {@code is} itself are never in
+     * {@code extra}. The flat/recorded form keeps its unknowns inside {@link IsResponse#extra} instead.
+     */
+    record Is(IsResponse is, Behaviors behaviors, Optional<RiftResponseExtension> rift,
+            Map<String, JsonValue> extra) implements Response {
         public Is {
-            java.util.Objects.requireNonNull(is, "is");
-            java.util.Objects.requireNonNull(behaviors, "behaviors");
-            java.util.Objects.requireNonNull(rift, "rift");
+            Objects.requireNonNull(is, "is");
+            Objects.requireNonNull(behaviors, "behaviors");
+            Objects.requireNonNull(rift, "rift");
+            Objects.requireNonNull(extra, "extra");
+            JsonSupport.rejectModeledExtraKeys(extra, Set.of("is", "_behaviors", "behaviors", "_rift"), "is response");
+            extra = JsonSupport.orderedCopy(extra);
+        }
+
+        public Is(IsResponse is, Behaviors behaviors, Optional<RiftResponseExtension> rift) {
+            this(is, behaviors, rift, Map.of());
         }
     }
 
@@ -102,7 +116,8 @@ public sealed interface Response {
             return new Is(
                     IsResponse.read(JsonSupport.requireObject(obj.get("is"), "is")),
                     readBehaviors(obj),
-                    readRift(obj));
+                    readRift(obj),
+                    JsonSupport.extraFields(obj, Set.of("is", "_behaviors", "behaviors", "_rift")));
         }
         if (obj.get("proxy") != null) {
             return new Proxy(
@@ -171,6 +186,7 @@ public sealed interface Response {
                 builder.put("_behaviors", is.behaviors().toJsonValue());
             }
             is.rift().ifPresent(v -> builder.put("_rift", v.toJsonValue()));
+            is.extra().forEach(builder::put);
         } else if (this instanceof Proxy proxy) {
             builder.put("proxy", proxy.proxy().toJsonValue());
             proxy.extra().forEach(builder::put);
