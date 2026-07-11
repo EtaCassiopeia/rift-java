@@ -351,6 +351,16 @@ public final class RiftDsl {
         return CopySpec.from(from);
     }
 
+    /** Starts a {@code copy} entry extracting from a query parameter (the object {@code from} form). */
+    public static CopySpec copyFromQuery(String name) {
+        return CopySpec.fromQuery(name);
+    }
+
+    /** Starts a {@code copy} entry extracting from a request header (the object {@code from} form). */
+    public static CopySpec copyFromHeader(String name) {
+        return CopySpec.fromHeader(name);
+    }
+
     /** Starts building a {@code lookup} behavior entry keyed by a value extracted from {@code from}. */
     public static LookupSpec lookupKey(String from) {
         return LookupSpec.key(from);

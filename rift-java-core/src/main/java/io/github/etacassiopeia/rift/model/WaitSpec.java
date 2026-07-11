@@ -14,9 +14,15 @@ public sealed interface WaitSpec {
 
     record Inject(String script) implements WaitSpec {}
 
+    /** A {@code wait} given as a bare string (a function body / named latency); round-trips verbatim. */
+    record Script(String source) implements WaitSpec {}
+
     static WaitSpec read(JsonValue value) {
         if (value instanceof JsonNumber n) {
             return new Fixed(n.asLong());
+        }
+        if (value instanceof JsonString s) {
+            return new Script(s.value());
         }
         if (value instanceof JsonObject obj) {
             if (obj.has("inject")) {
@@ -27,7 +33,7 @@ public sealed interface WaitSpec {
             }
             throw new WireFormatException("'wait': object must have 'inject' or 'min'/'max'");
         }
-        throw new WireFormatException("'wait': expected a number or object, got " + JsonSupport.typeName(value));
+        throw new WireFormatException("'wait': expected a number, string, or object, got " + JsonSupport.typeName(value));
     }
 
     default JsonValue toJsonValue() {
@@ -39,6 +45,9 @@ public sealed interface WaitSpec {
         }
         if (this instanceof Inject inject) {
             return JsonObject.builder().put("inject", new JsonString(inject.script())).build();
+        }
+        if (this instanceof Script script) {
+            return new JsonString(script.source());
         }
         throw new IllegalStateException("unreachable: " + this);
     }

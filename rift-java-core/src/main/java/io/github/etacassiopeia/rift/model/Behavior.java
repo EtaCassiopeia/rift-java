@@ -25,8 +25,18 @@ public sealed interface Behavior {
         public String key() { return "decorate"; }
     }
 
-    record Copy(List<CopyEntry> entries) implements Behavior {
-        public Copy { entries = List.copyOf(entries); }
+    /**
+     * A {@code copy} behavior. The engine accepts either a single entry object ({@code objectForm})
+     * or an array of them; the form is preserved so a parse → serialize round-trip is byte-faithful.
+     */
+    record Copy(List<CopyEntry> entries, boolean objectForm) implements Behavior {
+        public Copy {
+            entries = List.copyOf(entries);
+            if (objectForm && entries.size() != 1) {
+                throw new IllegalArgumentException("object-form copy must have exactly one entry, got " + entries.size());
+            }
+        }
+        public Copy(List<CopyEntry> entries) { this(entries, false); }
         public String key() { return "copy"; }
     }
 
@@ -44,17 +54,21 @@ public sealed interface Behavior {
         return switch (key) {
             case "wait" -> new Wait(WaitSpec.read(value));
             case "decorate" -> new Decorate(JsonSupport.requireString(value, "'decorate'"));
-            case "copy" -> new Copy(readCopyEntries(value));
+            case "copy" -> readCopy(value);
             case "repeat" -> new Repeat(numberOf(value, "repeat").asInt());
             case "shellTransform" -> new ShellTransform(JsonSupport.requireString(value, "'shellTransform'"));
             default -> new Unknown(key, value);
         };
     }
 
-    private static List<CopyEntry> readCopyEntries(JsonValue value) {
-        return JsonSupport.requireArray(value, "'copy'").items().stream()
+    private static Copy readCopy(JsonValue value) {
+        if (value instanceof JsonObject obj) {
+            return new Copy(List.of(CopyEntry.read(obj)), true);
+        }
+        List<CopyEntry> entries = JsonSupport.requireArray(value, "'copy'").items().stream()
                 .map(el -> CopyEntry.read(JsonSupport.requireObject(el, "'copy[]'")))
                 .toList();
+        return new Copy(entries, false);
     }
 
     private static JsonNumber numberOf(JsonValue value, String context) {
@@ -77,6 +91,9 @@ public sealed interface Behavior {
             return new JsonString(decorate.script());
         }
         if (this instanceof Copy copy) {
+            if (copy.objectForm()) {
+                return copy.entries().get(0).toJsonValue();
+            }
             return new JsonArray(copy.entries().stream().map(CopyEntry::toJsonValue).map(v -> (JsonValue) v).toList());
         }
         if (this instanceof Repeat repeat) {

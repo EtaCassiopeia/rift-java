@@ -17,6 +17,9 @@ import java.util.function.Supplier;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.and;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.body;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.contains;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.copyFrom;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.copyFromHeader;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.copyFromQuery;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.deepEquals;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.endsWith;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.exists;
@@ -24,6 +27,8 @@ import static io.github.etacassiopeia.rift.dsl.RiftDsl.header;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.imposter;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.inMemoryFlowState;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.inject;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.jsonPath;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.lookupKey;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.matches;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.method;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.not;
@@ -36,6 +41,7 @@ import static io.github.etacassiopeia.rift.dsl.RiftDsl.onRequest;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.or;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.path;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.query;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.regex;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.script;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.startsWith;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.status;
@@ -61,12 +67,15 @@ final class DslFixtures {
         Map<Integer, Supplier<ImposterDefinition>> registry = new HashMap<>();
         registry.put(1, DslFixtures::build01);
         registry.put(2, DslFixtures::build02);
+        registry.put(3, DslFixtures::build03);
         registry.put(5, DslFixtures::build05);
         registry.put(6, DslFixtures::build06);
         registry.put(10, DslFixtures::build10);
         registry.put(11, DslFixtures::build11);
         registry.put(13, DslFixtures::build13);
+        registry.put(14, DslFixtures::build14);
         registry.put(15, DslFixtures::build15);
+        registry.put(16, DslFixtures::build16);
         registry.put(17, DslFixtures::build17);
         REGISTRY = Map.copyOf(registry);
     }
@@ -185,6 +194,50 @@ final class DslFixtures {
                 .build();
     }
 
+    private static ImposterDefinition build03() {
+        return imposter("03 · Behaviors (wait, repeat, decorate, copy, lookup)")
+                .port(4503)
+                .protocol("http")
+                .record()
+                .stub(List.of(
+                        named("wait — fixed 1500ms delay",
+                                onRequest().withPath(RiftDsl.equals("/slow"))
+                                        .willReturn(status(200).withJsonBody("{\"note\":\"delayed 1.5s\"}").waitMs(1500))),
+                        named("wait — random delay between 200ms and 1200ms",
+                                onRequest().withPath(RiftDsl.equals("/slow-range"))
+                                        .willReturn(status(200).withJsonBody("{\"note\":\"delayed 200-1200ms\"}").waitBetween(200, 1200))),
+                        named("repeat — fail 503 twice, then 200 (sequence cycles)",
+                                onRequest().withPath(RiftDsl.equals("/retry-me"))
+                                        .willReturn(status(503).withJsonBody("{\"error\":\"try again\"}").repeat(2))
+                                        .willReturn(status(200).withJsonBody("{\"ok\":true}"))),
+                        named("decorate — JS post-processes the response (adds a header) [needs --allow-injection]",
+                                onRequest().withPath(RiftDsl.equals("/decorated"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withJsonBody("{\"decorated\":false}")
+                                                .decorate("function (request, response) { response.headers['X-Decorated-By'] = 'rift'; response.body = response.body.replace('false', 'true'); }"))),
+                        named("copy — pull the numeric id out of the path into the body",
+                                onRequest().withPath(matches("^/orders/\\d+$"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withHeader("X-Order-Id", "${orderId}")
+                                                .withJsonBody("{\"orderId\":\"${orderId}\",\"status\":\"shipped\"}")
+                                                .copyObject(copyFrom("path").into("${orderId}").using(regex("/orders/(\\d+)"))))),
+                        named("copy — pull a query parameter (?user=) into the response",
+                                onRequest().withPath(RiftDsl.equals("/greet"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withJsonBody("{\"greeting\":\"hello ${user}\"}")
+                                                .copyObject(copyFromQuery("user").into("${user}").using(regex("(.*)"))))),
+                        named("lookup — enrich the response from data/products.csv by id in the path",
+                                onRequest().withPath(matches("^/catalog/\\d+$"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withJsonBody("{\"id\":\"${row}[id]\",\"name\":\"${row}[name]\",\"price\":\"${row}[price]\",\"category\":\"${row}[category]\"}")
+                                                .lookupObject(lookupKey("path").using(regex("/catalog/(\\d+)")).fromCsv("data/products.csv", "id").into("${row}"))))))
+                .build();
+    }
+
     private static ImposterDefinition build05() {
         return imposter("05 · Scripting Engines (rhai, javascript)")
                 .port(4505)
@@ -285,6 +338,22 @@ final class DslFixtures {
                 .build();
     }
 
+    private static ImposterDefinition build14() {
+        return imposter("14 · _verify annotations (rift-verify --verify-dynamic)")
+                .port(4514)
+                .protocol("http")
+                .stub(List.of(
+                        named("repeat:2 cycle, asserted by a _verify sequence",
+                                onRequest().withPath(RiftDsl.equals("/retry"))
+                                        .willReturn(status(503).withTextBody("unavailable").repeat(2))
+                                        .willReturn(status(200).withTextBody("ok"))),
+                        named("copy (request-derived) decorate, asserted by _verify",
+                                onRequest().withPath(matches("^/orders/[0-9]+$"))
+                                        .willReturn(status(200).withTextBody("id=${ID}")
+                                                .copyObject(copyFrom("path").into("${ID}").using(regex("/orders/([0-9]+)")))))))
+                .build();
+    }
+
     private static ImposterDefinition build15() {
         return imposter("15 · Predicate modifiers (issue #254 §D1)")
                 .port(4515)
@@ -309,6 +378,38 @@ final class DslFixtures {
                         named("exists:false — header X-Skip must be ABSENT",
                                 onRequest().withPredicate(header("X-Skip", notExists())).withPath(RiftDsl.equals("/noskip"))
                                         .willReturn(status(200).withTextBody("absent")))))
+                .build();
+    }
+
+    private static ImposterDefinition build16() {
+        return imposter("16 · Advanced behaviors (issue #254 §D3)")
+                .port(4516)
+                .protocol("http")
+                .record()
+                .stub(List.of(
+                        named("copy — from a request header into the body",
+                                onRequest().withPath(RiftDsl.equals("/from-header"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withJsonBody("{\"requestId\":\"${rid}\"}")
+                                                .copyObject(copyFromHeader("X-Request-Id").into("${rid}").using(regex(".*"))))),
+                        named("copy — extract a JSON field from the body via jsonpath",
+                                onRequest().withPath(RiftDsl.equals("/from-json"))
+                                        .willReturn(status(200).withTextBody("who=${who}")
+                                                .copyObject(copyFrom("body").into("${who}").using(jsonPath("$.user.name"))))),
+                        named("lookup — enrich the response from products.csv by id",
+                                onRequest().withPath(matches("^/catalog/[0-9]+$"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withJsonBody("{\"name\":\"${row}[name]\",\"price\":\"${row}[price]\"}")
+                                                .lookupObject(lookupKey("path").using(regex("/catalog/([0-9]+)")).fromCsv("data/products.csv", "id").into("${row}")))),
+                        named("wait — JS function returning a fixed delay",
+                                onRequest().withPath(RiftDsl.equals("/slow-fn"))
+                                        .willReturn(status(200).withTextBody("waited").waitScript("function(){ return 400; }"))),
+                        named("decorate — Rhai native, mutate response body in place",
+                                onRequest().withPath(RiftDsl.equals("/decorate-rhai"))
+                                        .willReturn(status(200).withTextBody("orig")
+                                                .decorate("response.body = \"rhai-decorated\";")))))
                 .build();
     }
 

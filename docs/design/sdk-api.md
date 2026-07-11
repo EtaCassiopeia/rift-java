@@ -360,9 +360,12 @@ public sealed interface ResponseSpec permits IsSpec, ProxySpec, FaultSpec, Injec
 ```java
 IsSpec withBinaryBody(byte[] bytes)                      // base64 + _mode=binary
 IsSpec withBodyFromCodec(Object pojo)                    // via RiftBodyCodec SPI (§10)
-IsSpec copy(CopySpec... copies)                          // _behaviors.copy
-IsSpec lookup(LookupSpec... lookups)                     // _behaviors.lookup
+IsSpec copy(CopySpec... copies)                          // _behaviors.copy (array wire form)
+IsSpec copyObject(CopySpec copy)                         // _behaviors.copy (single-object wire form)
+IsSpec lookup(LookupSpec... lookups)                     // _behaviors.lookup (array wire form)
+IsSpec lookupObject(LookupSpec lookup)                   // _behaviors.lookup (single-object wire form)
 IsSpec shellTransform(String... commands)                // _behaviors.shellTransform
+IsSpec waitScript(String source)                         // _behaviors.wait as a bare function string
 IsSpec templated()                                       // rename of template(); _rift.templated
 // probabilistic _rift faults (chainable, composable):
 IsSpec withLatencyFault(double probability, Duration min, Duration max)
@@ -373,6 +376,8 @@ IsSpec withTcpFault(double probability, Fault kind)
 
 // helper factories on RiftDsl:
 static CopySpec copyFrom(String from)                    // .into("$TOKEN").using(regex(...)|jsonPath(...)|xPath(...))
+static CopySpec copyFromQuery(String name)               // copy from {"query": name}
+static CopySpec copyFromHeader(String name)              // copy from {"headers": name}
 static LookupSpec lookupKey(String from)                 // .using(...).fromCsv(path, keyColumn).into("$ROW")
 ```
 
