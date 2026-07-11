@@ -3,8 +3,11 @@ package io.github.etacassiopeia.rift.embedded;
 import io.github.etacassiopeia.rift.error.EngineError;
 import io.github.etacassiopeia.rift.error.EngineUnavailable;
 import io.github.etacassiopeia.rift.json.JsonBool;
+import io.github.etacassiopeia.rift.json.JsonNumber;
 import io.github.etacassiopeia.rift.json.JsonObject;
+import io.github.etacassiopeia.rift.json.JsonString;
 import io.github.etacassiopeia.rift.json.JsonValue;
+import io.github.etacassiopeia.rift.transport.StubAddress;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
@@ -78,6 +81,139 @@ final class FfiCalls {
     JsonValue recorded(int port) {
         ensureLive();
         return readJsonAndFree(ffi.recorded(handle, port));
+    }
+
+    JsonValue stubWarnings(int port) {
+        ensureLive();
+        return readJsonAndFree(ffi.stubWarnings(handle, port));
+    }
+
+    JsonValue verify(int port, JsonValue body) {
+        ensureLive();
+        try (Arena args = Arena.ofConfined()) {
+            return readJsonAndFree(ffi.verify(handle, port, FfmCompat.allocateCString(args, body.toJson())));
+        }
+    }
+
+    JsonValue listImposters(boolean replayable, boolean removeProxies) {
+        ensureLive();
+        String options = listOptionsJson(replayable, removeProxies);
+        try (Arena args = Arena.ofConfined()) {
+            return readJsonAndFree(ffi.listImposters(handle, FfmCompat.allocateCString(args, options)));
+        }
+    }
+
+    JsonValue getImposter(int port, boolean replayable, boolean removeProxies) {
+        ensureLive();
+        String options = listOptionsJson(replayable, removeProxies);
+        try (Arena args = Arena.ofConfined()) {
+            return readJsonAndFree(ffi.getImposter(handle, port, FfmCompat.allocateCString(args, options)));
+        }
+    }
+
+    private static String listOptionsJson(boolean replayable, boolean removeProxies) {
+        return JsonObject.builder()
+                .put("replayable", JsonBool.of(replayable))
+                .put("removeProxies", JsonBool.of(removeProxies))
+                .build()
+                .toJson();
+    }
+
+    void addStub(int port, JsonValue stub) {
+        ensureLive();
+        try (Arena args = Arena.ofConfined()) {
+            // index < 0 appends; direct FFI never auto-assigns a position (mirrors rift_add_stub).
+            int rc = ffi.addStub(handle, port, FfmCompat.allocateCString(args, stub.toJson()), -1);
+            if (rc != 0) {
+                throw engineError();
+            }
+        }
+    }
+
+    JsonValue getStub(int port, StubAddress addr) {
+        ensureLive();
+        try (Arena args = Arena.ofConfined()) {
+            return readJsonAndFree(ffi.getStub(handle, port, FfmCompat.allocateCString(args, refJson(addr))));
+        }
+    }
+
+    void updateStub(int port, StubAddress addr, JsonValue stub) {
+        ensureLive();
+        try (Arena args = Arena.ofConfined()) {
+            int rc = ffi.updateStub(handle, port, FfmCompat.allocateCString(args, refJson(addr)),
+                    FfmCompat.allocateCString(args, stub.toJson()));
+            if (rc != 0) {
+                throw engineError();
+            }
+        }
+    }
+
+    void deleteStub(int port, StubAddress addr) {
+        ensureLive();
+        try (Arena args = Arena.ofConfined()) {
+            int rc = ffi.deleteStub(handle, port, FfmCompat.allocateCString(args, refJson(addr)));
+            if (rc != 0) {
+                throw engineError();
+            }
+        }
+    }
+
+    private static String refJson(StubAddress addr) {
+        if (addr instanceof StubAddress.ByIndex idx) {
+            return JsonObject.builder().put("index", JsonNumber.of(idx.index())).build().toJson();
+        }
+        if (addr instanceof StubAddress.ById id) {
+            return JsonObject.builder().put("id", new JsonString(id.id())).build().toJson();
+        }
+        throw new IllegalStateException("unreachable: " + addr);
+    }
+
+    void clearRecorded(int port) {
+        ensureLive();
+        if (ffi.clearRecorded(handle, port) != 0) {
+            throw engineError();
+        }
+    }
+
+    void clearProxyResponses(int port) {
+        ensureLive();
+        if (ffi.clearProxyRecordings(handle, port) != 0) {
+            throw engineError();
+        }
+    }
+
+    void setImposterEnabled(int port, boolean enabled) {
+        ensureLive();
+        if (ffi.setImposterEnabled(handle, port, enabled ? 1 : 0) != 0) {
+            throw engineError();
+        }
+    }
+
+    JsonValue scenarios(int port, Optional<String> flowId) {
+        ensureLive();
+        try (Arena args = Arena.ofConfined()) {
+            MemorySegment flowIdSeg = flowId.isPresent() ? FfmCompat.allocateCString(args, flowId.get()) : MemorySegment.NULL;
+            return readJsonAndFree(ffi.scenarios(handle, port, flowIdSeg));
+        }
+    }
+
+    void setScenarioState(int port, String name, String state) {
+        ensureLive();
+        String stateJson = JsonObject.builder().put("state", new JsonString(state)).build().toJson();
+        try (Arena args = Arena.ofConfined()) {
+            int rc = ffi.setScenarioState(handle, port, FfmCompat.allocateCString(args, name),
+                    FfmCompat.allocateCString(args, stateJson));
+            if (rc != 0) {
+                throw engineError();
+            }
+        }
+    }
+
+    void resetScenarios(int port) {
+        ensureLive();
+        if (ffi.resetScenarios(handle, port, MemorySegment.NULL) != 0) {
+            throw engineError();
+        }
     }
 
     JsonValue applyConfig(JsonValue config) {

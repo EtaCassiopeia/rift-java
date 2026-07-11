@@ -156,25 +156,151 @@ class EmbeddedTransportIT {
     }
 
     @Test
-    void adminPlaneAndDelegatedOps() throws Exception {
+    void adminPlaneReachable() throws Exception {
+        // replaceAllImposters is the only op with no direct C-ABI symbol, so the loopback admin
+        // server must still start on demand.
         try (EmbeddedTransport t = open()) {
-            int port = portOf(t.createImposter(recordingImposter()));
-
             URI admin = t.adminUri();
             assertNotNull(admin, "adminUri lazily starts the in-process admin server");
             HttpResponse<String> health = HTTP.send(
                     HttpRequest.newBuilder(admin.resolve("/imposters")).timeout(Duration.ofSeconds(5)).GET().build(),
                     HttpResponse.BodyHandlers.ofString());
             assertEquals(200, health.statusCode(), "admin API is reachable");
+        }
+    }
 
-            // delegated (no direct C symbol) — must route through the admin plane
-            assertNotNull(t.getImposter(port), "getImposter via admin");
-            assertNotNull(t.scenarios(port, Optional.empty()), "scenarios via admin");
+    @Test
+    void v2AdminLongTailDirectFfi() throws Exception {
+        // #65: the v2-admin ops now run over direct FFI (rift#491). Exercise each end-to-end against
+        // the real engine — no native crash, correct data.
+        try (EmbeddedTransport t = open()) {
+            int port = portOf(t.createImposter(recordingImposter()));
+
+            // list / get imposter (options form)
+            assertNotNull(t.listImposters(false, false));
+            JsonValue imp = t.getImposter(port, false, false);
+            assertTrue(imp instanceof JsonObject, "getImposter returns the imposter object");
+
+            // per-stub CRUD: add, get, update, delete (by index)
+            t.addStub(port, JsonValue.parse(
+                    "{\"predicates\":[{\"equals\":{\"path\":\"/added\"}}],\"responses\":[{\"is\":{\"statusCode\":201}}]}"));
+            int added = ((JsonArray) ((JsonObject) t.getImposter(port)).get("stubs")).items().size() - 1;
+            io.github.etacassiopeia.rift.transport.StubAddress at =
+                    new io.github.etacassiopeia.rift.transport.StubAddress.ByIndex(added);
+            assertNotNull(t.getStub(port, at), "getStub returns the added stub");
+            t.replaceStub(port, at, JsonValue.parse(
+                    "{\"predicates\":[{\"equals\":{\"path\":\"/updated\"}}],\"responses\":[{\"is\":{\"statusCode\":202}}]}"));
+            t.deleteStub(port, at);
+
+            // enable/disable (set_imposter_enabled), scenarios, clear-recorded/proxy, verify, warnings
             t.disable(port);
             t.enable(port);
+            assertNotNull(t.scenarios(port, Optional.empty()));
+            t.setScenarioState(port, "s1", "open");
+            t.resetScenarios(port);
+            t.clearRecorded(port);
+            t.clearProxyResponses(port);
+            JsonValue verify = t.verify(port, JsonValue.parse(
+                    "{\"predicates\":[{\"equals\":{\"method\":\"GET\",\"path\":\"/ping\"}}]}"));
+            assertTrue(verify instanceof JsonObject o && o.get("matched") != null,
+                    "verify returns a {matched,total,…} envelope: " + verify.toJson());
+            assertNotNull(t.stubWarnings(port), "stubWarnings returns an array");
 
             t.deleteImposter(port);
         }
+    }
+
+    @Test
+    void directFfiMatchesLoopbackHttp() throws Exception {
+        // FFI-vs-HTTP parity (the diff rift-conformance#75 needs): a direct-FFI result must equal the
+        // loopback admin HTTP result for the same op, modulo the HTTP-only `_links` hypermedia (the
+        // admin server injects navigational links carrying its own base URL; the direct-FFI form has
+        // no URL context, so it returns the pure domain JSON — this is exactly what the parity diff
+        // strips).
+        try (EmbeddedTransport t = open()) {
+            int port = portOf(t.createImposter(recordingImposter()));
+            try (io.github.etacassiopeia.rift.transport.RemoteTransport http =
+                    new io.github.etacassiopeia.rift.transport.RemoteTransport(
+                            t.adminUri(), Optional.empty(), Duration.ofSeconds(5))) {
+                assertParity("getImposter", http.getImposter(port), t.getImposter(port));
+                assertParity("scenarios", http.scenarios(port, Optional.empty()),
+                        t.scenarios(port, Optional.empty()));
+                io.github.etacassiopeia.rift.transport.StubAddress s0 =
+                        new io.github.etacassiopeia.rift.transport.StubAddress.ByIndex(0);
+                assertParity("getStub", http.getStub(port, s0), t.getStub(port, s0));
+            }
+            t.deleteImposter(port);
+        }
+    }
+
+    @Test
+    void stubCrudByIdDirectFfi() {
+        // The `{"id":"..."}` ref_json encoding (StubAddress.ById) exercised end-to-end.
+        try (EmbeddedTransport t = open()) {
+            int port = portOf(t.createImposter(JsonValue.parse("{\"protocol\":\"http\",\"stubs\":[{\"id\":\"s1\","
+                    + "\"predicates\":[{\"equals\":{\"path\":\"/byid\"}}],\"responses\":[{\"is\":{\"statusCode\":200}}]}]}")));
+            io.github.etacassiopeia.rift.transport.StubAddress byId =
+                    new io.github.etacassiopeia.rift.transport.StubAddress.ById("s1");
+            assertNotNull(t.getStub(port, byId), "getStub by id");
+            t.replaceStub(port, byId, JsonValue.parse("{\"id\":\"s1\","
+                    + "\"predicates\":[{\"equals\":{\"path\":\"/byid2\"}}],\"responses\":[{\"is\":{\"statusCode\":202}}]}"));
+            t.deleteStub(port, byId);
+            t.deleteImposter(port);
+        }
+    }
+
+    @Test
+    void stubWarningsReturnsWarningsAndMatchesHttp() throws Exception {
+        // Two identical-predicate stubs → an exact_duplicate warning. Proves the direct rift_stub_warnings
+        // symbol actually returns warnings (not just []), and that it matches the HTTP-derived form.
+        try (EmbeddedTransport t = open()) {
+            int port = portOf(t.createImposter(JsonValue.parse("{\"protocol\":\"http\",\"stubs\":["
+                    + "{\"predicates\":[{\"equals\":{\"path\":\"/dup\"}}],\"responses\":[{\"is\":{\"statusCode\":200}}]},"
+                    + "{\"predicates\":[{\"equals\":{\"path\":\"/dup\"}}],\"responses\":[{\"is\":{\"statusCode\":201}}]}]}")));
+            JsonValue warnings = t.stubWarnings(port);
+            assertTrue(warnings instanceof JsonArray arr && !arr.items().isEmpty(),
+                    "duplicate stubs produce a warning: " + warnings.toJson());
+            try (io.github.etacassiopeia.rift.transport.RemoteTransport http =
+                    new io.github.etacassiopeia.rift.transport.RemoteTransport(
+                            t.adminUri(), Optional.empty(), Duration.ofSeconds(5))) {
+                assertParity("stubWarnings", http.stubWarnings(port), warnings);
+            }
+            t.deleteImposter(port);
+        }
+    }
+
+    @Test
+    void directFfiErrorMapsToRiftException() {
+        // A native sentinel (NULL char* / rc != 0) must surface as a typed RiftException, not a crash.
+        try (EmbeddedTransport t = open()) {
+            int port = portOf(t.createImposter(recordingImposter()));
+            assertThrows(RiftException.class,
+                    () -> t.getStub(port, new io.github.etacassiopeia.rift.transport.StubAddress.ByIndex(99)),
+                    "getStub on a nonexistent index maps to a RiftException");
+            t.deleteImposter(port);
+        }
+    }
+
+    private static void assertParity(String op, JsonValue http, JsonValue ffi) {
+        assertTrue(JsonValue.semanticEquals(stripLinks(http), stripLinks(ffi)),
+                op + " FFI == HTTP (modulo _links): FFI=" + ffi.toJson() + " HTTP=" + http.toJson());
+    }
+
+    /** Recursively drops the HTTP-only {@code _links} hypermedia so FFI and HTTP forms are comparable. */
+    private static JsonValue stripLinks(JsonValue v) {
+        if (v instanceof JsonObject obj) {
+            JsonObject.Builder b = JsonObject.builder();
+            obj.fields().forEach((k, val) -> {
+                if (!"_links".equals(k)) {
+                    b.put(k, stripLinks(val));
+                }
+            });
+            return b.build();
+        }
+        if (v instanceof JsonArray arr) {
+            return new JsonArray(arr.items().stream().map(EmbeddedTransportIT::stripLinks).toList());
+        }
+        return v;
     }
 
     @Test

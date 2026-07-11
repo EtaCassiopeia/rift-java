@@ -17,11 +17,12 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * {@link RiftTransport} over the in-process rift engine via the Panama FFM C-ABI v2. Imposter
- * lifecycle, recording, flow-state, and spaces are driven directly through {@code librift_ffi};
- * the operations with no direct C-ABI entry point (imposter listing, per-stub edits, scenarios,
- * enable/disable) are delegated to a lazily-started in-process admin server over {@link
- * RemoteTransport}.
+ * {@link RiftTransport} over the in-process rift engine via the Panama FFM C-ABI v2. Every
+ * admin-API operation with a direct C-ABI v2 entry point — imposter lifecycle, recording,
+ * flow-state, spaces, per-stub CRUD, listing, scenarios, enable/disable, verify, and stub
+ * warnings — is driven directly through {@code librift_ffi}. Only {@link #replaceAllImposters}
+ * (bulk {@code PUT /imposters}, with no C-ABI counterpart) is delegated to a lazily-started
+ * in-process admin server over {@link RemoteTransport}.
  */
 public final class EmbeddedTransport implements RiftTransport {
 
@@ -55,12 +56,12 @@ public final class EmbeddedTransport implements RiftTransport {
 
     @Override
     public JsonValue getImposter(int port) {
-        return admin().getImposter(port);
+        return calls.getImposter(port, false, false);
     }
 
     @Override
     public JsonValue getImposter(int port, boolean replayable, boolean removeProxies) {
-        return admin().getImposter(port, replayable, removeProxies);
+        return calls.getImposter(port, replayable, removeProxies);
     }
 
     @Override
@@ -75,7 +76,7 @@ public final class EmbeddedTransport implements RiftTransport {
 
     @Override
     public JsonValue listImposters(boolean replayable, boolean removeProxies) {
-        return admin().listImposters(replayable, removeProxies);
+        return calls.listImposters(replayable, removeProxies);
     }
 
     @Override
@@ -90,7 +91,7 @@ public final class EmbeddedTransport implements RiftTransport {
 
     @Override
     public void addStub(int port, JsonValue stub) {
-        admin().addStub(port, stub);
+        calls.addStub(port, stub);
     }
 
     @Override
@@ -100,12 +101,17 @@ public final class EmbeddedTransport implements RiftTransport {
 
     @Override
     public void replaceStub(int port, StubAddress addr, JsonValue stub) {
-        admin().replaceStub(port, addr, stub);
+        calls.updateStub(port, addr, stub);
     }
 
     @Override
     public void deleteStub(int port, StubAddress addr) {
-        admin().deleteStub(port, addr);
+        calls.deleteStub(port, addr);
+    }
+
+    @Override
+    public JsonValue getStub(int port, StubAddress addr) {
+        return calls.getStub(port, addr);
     }
 
     @Override
@@ -114,38 +120,48 @@ public final class EmbeddedTransport implements RiftTransport {
     }
 
     @Override
+    public JsonValue stubWarnings(int port) {
+        return calls.stubWarnings(port);
+    }
+
+    @Override
+    public JsonValue verify(int port, JsonValue body) {
+        return calls.verify(port, body);
+    }
+
+    @Override
     public void clearRecorded(int port) {
-        admin().clearRecorded(port);
+        calls.clearRecorded(port);
     }
 
     @Override
     public void clearProxyResponses(int port) {
-        admin().clearProxyResponses(port);
+        calls.clearProxyResponses(port);
     }
 
     @Override
     public void enable(int port) {
-        admin().enable(port);
+        calls.setImposterEnabled(port, true);
     }
 
     @Override
     public void disable(int port) {
-        admin().disable(port);
+        calls.setImposterEnabled(port, false);
     }
 
     @Override
     public JsonValue scenarios(int port, Optional<String> flowId) {
-        return admin().scenarios(port, flowId);
+        return calls.scenarios(port, flowId);
     }
 
     @Override
     public void setScenarioState(int port, String name, String state) {
-        admin().setScenarioState(port, name, state);
+        calls.setScenarioState(port, name, state);
     }
 
     @Override
     public void resetScenarios(int port) {
-        admin().resetScenarios(port);
+        calls.resetScenarios(port);
     }
 
     @Override
