@@ -41,7 +41,7 @@ public final class RiftTestExecutionListener extends AbstractTestExecutionListen
     /**
      * Reads {@code @EnableRift.reset()} straight off the test class, rather than through the {@link
      * RiftTestContext} bean, so a class not configured for {@link Reset#PER_CLASS} never forces the
-     * application context to load this early — before {@link RiftSpringTestBase}-style static
+     * application context to load this early — before {@code RiftSpringTestBase}-style static
      * initializers (e.g. publishing an admin URI system property) have had a chance to run. When the
      * class genuinely is {@link Reset#PER_CLASS}, the context load this triggers is still best-effort:
      * a failure here is swallowed so it doesn't fail the class before a single test runs.
