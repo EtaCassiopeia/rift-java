@@ -22,6 +22,19 @@ final class RiftFfi {
     private final MethodHandle deleteAll;
     private final MethodHandle recorded;
     private final MethodHandle stubWarnings;
+    private final MethodHandle verify;
+    private final MethodHandle listImposters;
+    private final MethodHandle getImposter;
+    private final MethodHandle addStub;
+    private final MethodHandle getStub;
+    private final MethodHandle updateStub;
+    private final MethodHandle deleteStub;
+    private final MethodHandle clearRecorded;
+    private final MethodHandle clearProxyRecordings;
+    private final MethodHandle setImposterEnabled;
+    private final MethodHandle scenarios;
+    private final MethodHandle setScenarioState;
+    private final MethodHandle resetScenarios;
     private final MethodHandle applyConfig;
     private final MethodHandle flowStateGet;
     private final MethodHandle flowStatePut;
@@ -58,6 +71,32 @@ final class RiftFfi {
                 FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT));
         this.stubWarnings = handle(lookup, linker, "rift_stub_warnings",
                 FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT));
+        this.verify = handle(lookup, linker, "rift_verify",
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.ADDRESS));
+        this.listImposters = handle(lookup, linker, "rift_list_imposters",
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+        this.getImposter = handle(lookup, linker, "rift_get_imposter",
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.ADDRESS));
+        this.addStub = handle(lookup, linker, "rift_add_stub",
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT));
+        this.getStub = handle(lookup, linker, "rift_get_stub",
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.ADDRESS));
+        this.updateStub = handle(lookup, linker, "rift_update_stub",
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+        this.deleteStub = handle(lookup, linker, "rift_delete_stub",
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.ADDRESS));
+        this.clearRecorded = handle(lookup, linker, "rift_clear_recorded",
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT));
+        this.clearProxyRecordings = handle(lookup, linker, "rift_clear_proxy_recordings",
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT));
+        this.setImposterEnabled = handle(lookup, linker, "rift_set_imposter_enabled",
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.JAVA_INT));
+        this.scenarios = handle(lookup, linker, "rift_scenarios",
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.ADDRESS));
+        this.setScenarioState = handle(lookup, linker, "rift_set_scenario_state",
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+        this.resetScenarios = handle(lookup, linker, "rift_reset_scenarios",
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_SHORT, ValueLayout.ADDRESS));
         this.applyConfig = handle(lookup, linker, "rift_apply_config",
                 FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.ADDRESS));
         this.flowStateGet = handle(lookup, linker, "rift_flow_state_get",
@@ -158,6 +197,58 @@ final class RiftFfi {
 
     MemorySegment stubWarnings(MemorySegment handle, int port) {
         return (MemorySegment) invoke(stubWarnings, handle, (short) port);
+    }
+
+    MemorySegment verify(MemorySegment handle, int port, MemorySegment bodyJson) {
+        return (MemorySegment) invoke(verify, handle, (short) port, bodyJson);
+    }
+
+    MemorySegment listImposters(MemorySegment handle, MemorySegment optionsJson) {
+        return (MemorySegment) invoke(listImposters, handle, optionsJson);
+    }
+
+    MemorySegment getImposter(MemorySegment handle, int port, MemorySegment optionsJson) {
+        return (MemorySegment) invoke(getImposter, handle, (short) port, optionsJson);
+    }
+
+    int addStub(MemorySegment handle, int port, MemorySegment stubJson, int index) {
+        return (int) invoke(addStub, handle, (short) port, stubJson, index);
+    }
+
+    MemorySegment getStub(MemorySegment handle, int port, MemorySegment refJson) {
+        return (MemorySegment) invoke(getStub, handle, (short) port, refJson);
+    }
+
+    int updateStub(MemorySegment handle, int port, MemorySegment refJson, MemorySegment stubJson) {
+        return (int) invoke(updateStub, handle, (short) port, refJson, stubJson);
+    }
+
+    int deleteStub(MemorySegment handle, int port, MemorySegment refJson) {
+        return (int) invoke(deleteStub, handle, (short) port, refJson);
+    }
+
+    int clearRecorded(MemorySegment handle, int port) {
+        return (int) invoke(clearRecorded, handle, (short) port);
+    }
+
+    int clearProxyRecordings(MemorySegment handle, int port) {
+        return (int) invoke(clearProxyRecordings, handle, (short) port);
+    }
+
+    int setImposterEnabled(MemorySegment handle, int port, int enabled) {
+        return (int) invoke(setImposterEnabled, handle, (short) port, enabled);
+    }
+
+    MemorySegment scenarios(MemorySegment handle, int port, MemorySegment flowId) {
+        return (MemorySegment) invoke(scenarios, handle, (short) port, flowId);
+    }
+
+    int setScenarioState(MemorySegment handle, int port, MemorySegment name, MemorySegment stateJson) {
+        return (int) invoke(setScenarioState, handle, (short) port, name, stateJson);
+    }
+
+    int resetScenarios(MemorySegment handle, int port, MemorySegment flowId) {
+        return (int) invoke(resetScenarios, handle, (short) port, flowId);
     }
 
     MemorySegment applyConfig(MemorySegment handle, MemorySegment json) {

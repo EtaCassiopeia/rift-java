@@ -203,6 +203,7 @@ public interface RiftTransport extends AutoCloseable {
   void replaceStubs(int port, JsonValue stubs);
   void replaceStub(int port, StubAddress address, JsonValue stub);   // index- or id-addressed
   void deleteStub(int port, StubAddress address);
+  JsonValue getStub(int port, StubAddress address);        // default: UnsupportedOperationException
   JsonValue recorded(int port);                            // savedRequests
   void clearRecorded(int port);
   void enable(int port);  void disable(int port);
@@ -227,8 +228,13 @@ public interface RiftTransport extends AutoCloseable {
   void interceptExportTruststore(String format, String password, Path out);
   // engine
   JsonValue buildInfo(); URI adminUri();
+  JsonValue verify(int port, JsonValue body);              // default: UnsupportedOperationException
+  JsonValue stubWarnings(int port);                        // default: UnsupportedOperationException
 }
 ```
+
+`getStub`, `verify`, and `stubWarnings` are `default` methods (throwing `UnsupportedOperationException`
+unless overridden) so existing `RiftTransport` implementations and test fakes keep compiling.
 
 Implementations: `RemoteTransport` (`java.net.http`, admin HTTP), `EmbeddedTransport`
 (FFM ↔ the C-ABI table below). `spawn` = `RemoteTransport` + process lifecycle. Everything
@@ -240,12 +246,18 @@ Embedded mapping (C-ABI v2): `createImposter→rift_create_imposter`, `replaceSt
 rift_replace_stubs`, `recorded→rift_recorded`, `deleteImposter→rift_delete_imposter`,
 `deleteAll→rift_delete_all`, `applyConfig→rift_apply_config`, `flowState*→rift_flow_state_*`,
 `space*→rift_space_*`, `startIntercept→rift_start_intercept`, `intercept*→rift_intercept_*`,
-`buildInfo→rift_build_info`, `adminUri→rift_serve_admin` (lazy, once). Operations with no
-direct FFI symbol (per-stub CRUD, scenarios, enable/disable, clearRecorded, `?match=` filters)
-route through the lazily-started in-process admin server — same code path as remote, zero
-loopback cost until first use. Ownership discipline (per-call confined arenas, `rift_free`,
-sentinel + same-thread `rift_last_error`, static `build_info` never freed, symbol-probe for
-graceful degradation) is encapsulated once in the bridge (issue #8).
+`buildInfo→rift_build_info`, `adminUri→rift_serve_admin` (lazy, once). The v2-admin long tail is
+now direct FFI too (rift ≥ 0.13.1): `getImposter`/`listImposters→rift_get_imposter`/
+`rift_list_imposters`, `addStub→rift_add_stub`, `getStub→rift_get_stub`, `replaceStub→
+rift_update_stub`, `deleteStub→rift_delete_stub`, `clearRecorded→rift_clear_recorded`,
+`clearProxyResponses→rift_clear_proxy_recordings`, `enable`/`disable→
+rift_set_imposter_enabled`, `scenarios→rift_scenarios`, `setScenarioState→
+rift_set_scenario_state`, `resetScenarios→rift_reset_scenarios`, `verify→rift_verify`,
+`stubWarnings→rift_stub_warnings`. Only `replaceAllImposters` (bulk `PUT /imposters`, no C-ABI
+counterpart) still routes through the lazily-started in-process admin server. Ownership
+discipline (per-call confined arenas, `rift_free`, sentinel + same-thread `rift_last_error`,
+static `build_info` never freed, symbol-probe for graceful degradation) is encapsulated once in
+the bridge (issue #8).
 
 ## 6. The handle: `Imposter`
 

@@ -46,6 +46,11 @@ public interface RiftTransport extends AutoCloseable {
 
     void deleteStub(int port, StubAddress addr);
 
+    /** The single stub addressed by {@code addr}, as its bare (unwrapped) JSON representation. */
+    default JsonValue getStub(int port, StubAddress addr) {
+        throw new UnsupportedOperationException("getStub");
+    }
+
     JsonValue recorded(int port);
 
     void clearRecorded(int port);
@@ -79,6 +84,21 @@ public interface RiftTransport extends AutoCloseable {
     JsonValue buildInfo();
 
     URI adminUri();
+
+    /**
+     * Counts recorded requests matching a predicate set server-side: {@code body} is the same
+     * {@code POST /imposters/{port}/verify} request body, {@code {"predicates":[…],"flowId"?,
+     * "includeRequests"?,"includeClosest"?}}; the result is the {@code {"matched","total",
+     * "requests"?,"closest"?}} envelope.
+     */
+    default JsonValue verify(int port, JsonValue body) {
+        throw new UnsupportedOperationException("verify");
+    }
+
+    /** The stub-overlap analysis warnings (duplicate/shadowed/catch-all stubs) for {@code port}, as a JSON array. */
+    default JsonValue stubWarnings(int port) {
+        throw new UnsupportedOperationException("stubWarnings");
+    }
 
     /**
      * Starts the intercept (TLS-MITM) listener with the given {@code {host,port,caCertPath,

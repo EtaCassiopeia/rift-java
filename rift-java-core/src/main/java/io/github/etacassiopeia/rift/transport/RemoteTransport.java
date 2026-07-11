@@ -146,6 +146,11 @@ public final class RemoteTransport implements RiftTransport {
         executeVoid("DELETE", stubPath(port, addr), null, OptionalInt.of(port));
     }
 
+    @Override
+    public JsonValue getStub(int port, StubAddress addr) {
+        return executeJson("GET", stubPath(port, addr), null, OptionalInt.of(port));
+    }
+
     private static String stubPath(int port, StubAddress addr) {
         if (addr instanceof StubAddress.ByIndex idx) {
             return "/imposters/" + port + "/stubs/" + idx.index();
@@ -257,6 +262,34 @@ public final class RemoteTransport implements RiftTransport {
     @Override
     public JsonValue buildInfo() {
         return executeJson("GET", "/config", null, OptionalInt.empty());
+    }
+
+    @Override
+    public JsonValue verify(int port, JsonValue body) {
+        return executeJson("POST", "/imposters/" + port + "/verify", body.toJson(), OptionalInt.of(port));
+    }
+
+    @Override
+    public JsonValue stubWarnings(int port) {
+        // The admin API has no dedicated warnings route; warnings ride along as _rift.warnings on
+        // the imposter detail response, and are omitted entirely (both _rift and, within it,
+        // warnings are skip_serializing_if-empty) when there are none. Distinguish a genuinely
+        // absent field (⇒ empty) from a present-but-wrong-typed one (version skew / engine bug),
+        // which must surface rather than masquerade as "no warnings".
+        JsonValue imposter = getImposter(port);
+        JsonValue rift = imposter instanceof JsonObject obj ? obj.get("_rift") : null;
+        if (rift == null) {
+            return JsonArray.of();
+        }
+        JsonValue warnings = rift instanceof JsonObject riftObj ? riftObj.get("warnings") : null;
+        if (warnings == null && rift instanceof JsonObject) {
+            return JsonArray.of();
+        }
+        if (warnings instanceof JsonArray arr) {
+            return arr;
+        }
+        throw new CommunicationError(
+                "port " + port + ": imposter response has a _rift.warnings of an unexpected shape: " + imposter.toJson());
     }
 
     // ------------------------------------------------------------------
