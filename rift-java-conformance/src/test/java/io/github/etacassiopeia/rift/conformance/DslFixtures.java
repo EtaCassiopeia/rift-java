@@ -1,5 +1,6 @@
 package io.github.etacassiopeia.rift.conformance;
 
+import io.github.etacassiopeia.rift.dsl.Fault;
 import io.github.etacassiopeia.rift.dsl.RiftDsl;
 import io.github.etacassiopeia.rift.dsl.Script;
 import io.github.etacassiopeia.rift.dsl.StubSpec;
@@ -68,6 +69,7 @@ final class DslFixtures {
         registry.put(1, DslFixtures::build01);
         registry.put(2, DslFixtures::build02);
         registry.put(3, DslFixtures::build03);
+        registry.put(4, DslFixtures::build04);
         registry.put(5, DslFixtures::build05);
         registry.put(6, DslFixtures::build06);
         registry.put(10, DslFixtures::build10);
@@ -235,6 +237,50 @@ final class DslFixtures {
                                                 .withHeader("Content-Type", "application/json")
                                                 .withJsonBody("{\"id\":\"${row}[id]\",\"name\":\"${row}[name]\",\"price\":\"${row}[price]\",\"category\":\"${row}[category]\"}")
                                                 .lookupObject(lookupKey("path").using(regex("/catalog/(\\d+)")).fromCsv("data/products.csv", "id").into("${row}"))))))
+                .build();
+    }
+
+    private static ImposterDefinition build04() {
+        return imposter("04 · Fault Injection (_rift.fault)")
+                .port(4504)
+                .protocol("http")
+                .record()
+                .stub(List.of(
+                        named("Latency — always add 500-2000ms",
+                                onRequest().withPath(RiftDsl.equals("/faults/latency"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withJsonBody("{\"endpoint\":\"/faults/latency\",\"note\":\"random latency 500-2000ms\"}")
+                                                .withLatencyFault(1.0, Duration.ofMillis(500), Duration.ofMillis(2000)))),
+                        named("Latency — 50% chance of a fixed 1s delay",
+                                onRequest().withPath(RiftDsl.equals("/faults/sometimes-slow"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withJsonBody("{\"endpoint\":\"/faults/sometimes-slow\",\"note\":\"50% chance of +1000ms\"}")
+                                                .withLatencyFault(0.5, Duration.ofMillis(1000)))),
+                        named("Error — 30% chance of a 503 instead of the happy body",
+                                onRequest().withPath(RiftDsl.equals("/faults/flaky"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withJsonBody("{\"endpoint\":\"/faults/flaky\",\"note\":\"30% chance of 503\"}")
+                                                .withErrorFault(0.3, 503, "{\"error\":\"service temporarily unavailable\",\"code\":\"FLAKY\"}"))),
+                        named("Combined — 70% latency AND 20% error (chaos)",
+                                onRequest().withPath(RiftDsl.equals("/faults/chaos"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withJsonBody("{\"endpoint\":\"/faults/chaos\",\"note\":\"70% latency + 20% error\"}")
+                                                .withLatencyFault(0.7, Duration.ofMillis(200), Duration.ofMillis(800))
+                                                .withErrorFault(0.2, 500, "{\"error\":\"internal chaos\"}"))),
+                        named("TCP — reset the connection (no HTTP response at all)",
+                                onRequest().withPath(RiftDsl.equals("/faults/tcp-reset"))
+                                        .willReturn(status(200)
+                                                .withTextBody("you will never see this")
+                                                .withTcpFault(Fault.CONNECTION_RESET_BY_PEER))),
+                        named("Baseline — no fault, for comparison",
+                                onRequest().withPath(RiftDsl.equals("/faults/healthy"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withJsonBody("{\"status\":\"healthy\",\"note\":\"no faults injected\"}")))))
                 .build();
     }
 

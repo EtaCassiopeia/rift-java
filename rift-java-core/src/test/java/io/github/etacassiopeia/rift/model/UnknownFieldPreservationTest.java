@@ -51,9 +51,8 @@ class UnknownFieldPreservationTest {
         assertTrue(proxy.proxy().extra().containsKey("futureProxyField"));
 
         // And they survive a full parse -> serialize -> parse cycle at every level (write emits them,
-        // read re-captures them). A whole-tree byte/semantic compare is deliberately NOT used: the
-        // proxy always emits predicateGenerators/addWaitBehavior/injectHeaders defaults, so a fixture
-        // that omits them legitimately gains them on write — that is unrelated to unknown-key survival.
+        // read re-captures them). Per-key assertions, not a whole-tree compare: this test's concern is
+        // unknown-key survival, independent of the modeled fields' serialization.
         ImposterDefinition reparsed = ImposterDefinition.fromJson(def.toJson());
         assertTrue(reparsed.extra().containsKey("futureImposterField"));
         Stub reStub = reparsed.stubs().get(0);
