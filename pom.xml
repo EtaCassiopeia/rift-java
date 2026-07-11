@@ -71,6 +71,7 @@
     <module>rift-java-natives</module>
     <module>rift-java-spring</module>
     <module>rift-java-testcontainers</module>
+    <module>rift-java-conformance</module>
     <module>rift-java-bom</module>
   </modules>
 
