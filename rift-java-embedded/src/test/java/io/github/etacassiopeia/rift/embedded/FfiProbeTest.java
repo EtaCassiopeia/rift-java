@@ -25,7 +25,7 @@ class FfiProbeTest {
                 () -> RiftFfi.bind(noSymbols, Linker.nativeLinker()));
 
         String msg = ex.getMessage();
-        assertTrue(msg.contains("0.12.0") || msg.toLowerCase().contains("rift_build_info"),
+        assertTrue(msg.contains("0.13.1") || msg.toLowerCase().contains("rift_build_info"),
                 "message should name the required version or the missing probe symbol: " + msg);
     }
 }

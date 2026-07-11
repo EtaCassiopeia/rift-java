@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class RiftImpl implements Rift {
 
     /** The oldest engine version this SDK is known to work against; see the version preflight. */
-    static final String MIN_ENGINE_VERSION = "0.12.0";
+    static final String MIN_ENGINE_VERSION = "0.13.1";
 
     private static final System.Logger LOG = System.getLogger(RiftImpl.class.getName());
 

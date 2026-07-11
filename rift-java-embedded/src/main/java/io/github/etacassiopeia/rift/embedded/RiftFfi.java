@@ -99,7 +99,7 @@ final class RiftFfi {
     private static MethodHandle handle(SymbolLookup lookup, Linker linker, String name, FunctionDescriptor descriptor) {
         return linker.downcallHandle(
                 lookup.find(name).orElseThrow(() -> new EngineUnavailable(
-                        "rift-java-embedded requires rift >= 0.12.0 (C-ABI v2): the loaded native library is missing " + name)),
+                        "rift-java-embedded requires rift >= 0.13.1 (C-ABI v2): the loaded native library is missing " + name)),
                 descriptor);
     }
 
@@ -111,7 +111,7 @@ final class RiftFfi {
     static RiftFfi bind(SymbolLookup lookup, Linker linker) {
         if (lookup.find("rift_build_info").isEmpty()) {
             throw new EngineUnavailable(
-                    "rift-java-embedded requires rift >= 0.12.0 (C-ABI v2): the loaded native library is missing rift_build_info");
+                    "rift-java-embedded requires rift >= 0.13.1 (C-ABI v2): the loaded native library is missing rift_build_info");
         }
         return new RiftFfi(lookup, linker);
     }
