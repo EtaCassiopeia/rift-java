@@ -107,6 +107,14 @@ final class JsonSupport {
         return requireNumber(v, key).asDouble();
     }
 
+    static double requireDouble(JsonObject obj, String key) {
+        JsonValue v = obj.get(key);
+        if (v == null) {
+            throw new WireFormatException("'" + key + "': expected a number, got absent");
+        }
+        return requireNumber(v, key).asDouble();
+    }
+
     static Optional<Integer> optIntBox(JsonObject obj, String key) {
         JsonValue v = obj.get(key);
         if (v == null) {
