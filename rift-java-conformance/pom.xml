@@ -12,11 +12,13 @@
 
   <artifactId>rift-java-conformance</artifactId>
   <name>rift-java-conformance</name>
-  <description>SDK conformance suite: replays the engine's published corpus over the remote/spawn transport.</description>
+  <description>SDK conformance suite: replays the engine's published corpus over the spawn and embedded transports.</description>
 
   <properties>
     <!-- Test-only harness: never published to Central. -->
     <maven.deploy.skip>true</maven.deploy.skip>
+    <!-- Passed through to the embedded lanes' test JVM; override with -Drift.ffi.lib=<cdylib>. -->
+    <rift.ffi.lib></rift.ffi.lib>
   </properties>
 
   <dependencies>
@@ -53,4 +55,69 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!-- The EMBEDDED transport needs rift-java-embedded on the test classpath, which only builds on
+         JDK 22+ (stable FFM). Gated to the same JDK range as the module itself, so the JDK-17 baseline
+         build still resolves. Under JDK 17 the embedded provider is simply absent and the EMBEDDED
+         lane self-skips. -->
+    <profile>
+      <id>conformance-embedded</id>
+      <activation>
+        <jdk>[22,)</jdk>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>io.github.etacassiopeia</groupId>
+          <artifactId>rift-java-embedded</artifactId>
+          <version>${project.version}</version>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <argLine>--enable-native-access=ALL-UNNAMED</argLine>
+              <systemPropertyVariables>
+                <rift.ffi.lib>${rift.ffi.lib}</rift.ffi.lib>
+              </systemPropertyVariables>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <!-- JDK 21 preview-FFM variant: same, against rift-java-embedded-jdk21 with preview enabled. -->
+    <profile>
+      <id>conformance-embedded-jdk21</id>
+      <activation>
+        <jdk>21</jdk>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>io.github.etacassiopeia</groupId>
+          <artifactId>rift-java-embedded-jdk21</artifactId>
+          <version>${project.version}</version>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <argLine>--enable-preview --enable-native-access=ALL-UNNAMED</argLine>
+              <systemPropertyVariables>
+                <rift.ffi.lib>${rift.ffi.lib}</rift.ffi.lib>
+              </systemPropertyVariables>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

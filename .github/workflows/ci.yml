@@ -89,23 +89,35 @@ jobs:
       - name: Run RiftContainer integration tests against Docker
         run: ./mvnw -B -ntp -pl rift-java-testcontainers -am test
 
-  # The M1 conformance gate: replays the engine's published SDK conformance corpus over the
-  # remote/spawn transport (parse fidelity + DSL expressibility + engine _verify replay). The corpus
-  # is version-locked to the pinned engine (rift.engine.version), downloaded from that engine release;
-  # the engine binary itself is fetched by Rift.spawn's BinaryResolver on first use. RIFT_IT=1 un-gates
-  # the engine replay lane (CorpusReplayIT self-skips everywhere else).
+  # The conformance gate: replays the engine's published SDK conformance corpus over each supported
+  # transport (parse fidelity + DSL expressibility + engine _verify replay). The corpus is version-
+  # locked to the pinned engine (rift.engine.version). RIFT_IT=1 un-gates the replay; CONFORMANCE_
+  # TRANSPORT selects it (SPAWN downloads the engine binary; EMBEDDED runs it in-process over FFM and
+  # so each embedded lane fetches its platform's librift_ffi and exposes it via RIFT_FFI_LIB).
+  # Windows stays experimental (continue-on-error) until it is green for two consecutive weeks.
   conformance:
-    name: conformance corpus (remote transport, JDK 17)
-    runs-on: ubuntu-latest
+    name: conformance (${{ matrix.lane.transport }} / ${{ matrix.lane.os }} JDK ${{ matrix.lane.jdk }})
+    runs-on: ${{ matrix.lane.os }}
+    continue-on-error: ${{ matrix.lane.experimental == true }}
+    strategy:
+      fail-fast: false
+      matrix:
+        lane:
+          - { os: ubuntu-latest, jdk: '17', transport: SPAWN }                          # M1 gate
+          - { os: ubuntu-latest, jdk: '22', transport: EMBEDDED }                       # M2 gate
+          - { os: ubuntu-latest, jdk: '21', transport: EMBEDDED }                       # M2 gate (preview FFM)
+          - { os: macos-14, jdk: '22', transport: EMBEDDED }                            # M2 gate (darwin-aarch64)
+          - { os: windows-latest, jdk: '22', transport: EMBEDDED, experimental: true }  # experimental
     env:
       RIFT_IT: '1'
+      CONFORMANCE_TRANSPORT: ${{ matrix.lane.transport }}
     steps:
       - uses: actions/checkout@v4
-      - name: Set up JDK 17
+      - name: Set up JDK ${{ matrix.lane.jdk }}
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: ${{ matrix.lane.jdk }}
           cache: maven
       - name: Download the version-locked conformance corpus
         shell: bash
@@ -114,11 +126,28 @@ jobs:
           VER="$(./mvnw -q -N help:evaluate -Dexpression=rift.engine.version -DforceStdout)"
           echo "Pinned engine/corpus version: v${VER}"
           mkdir -p rift-java-conformance/target/corpus
-          curl -fsSL -o /tmp/sdk-conformance.tar.gz \
+          curl -fsSL -o "${RUNNER_TEMP}/sdk-conformance.tar.gz" \
             "https://github.com/EtaCassiopeia/rift/releases/download/v${VER}/sdk-conformance-v${VER}.tar.gz"
-          tar -xzf /tmp/sdk-conformance.tar.gz -C rift-java-conformance/target/corpus
+          tar -xzf "${RUNNER_TEMP}/sdk-conformance.tar.gz" -C rift-java-conformance/target/corpus
           # Point at the parent dir; Corpus.descend() resolves the single extracted sdk-conformance-* child,
           # so this survives a change to the tarball's top-level directory name.
           echo "RIFT_CORPUS_ROOT=$(pwd)/rift-java-conformance/target/corpus" >> "$GITHUB_ENV"
-      - name: Replay the corpus over the remote/spawn transport
+      - name: Fetch the platform librift_ffi (embedded lanes)
+        if: matrix.lane.transport == 'EMBEDDED'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="$(./mvnw -q -N help:evaluate -Dexpression=rift.engine.version -DforceStdout)"
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            Linux-X64)   ASSET="librift_ffi-linux-x86_64.so" ;;
+            macOS-ARM64) ASSET="librift_ffi-darwin-aarch64.dylib" ;;
+            macOS-X64)   ASSET="librift_ffi-darwin-x86_64.dylib" ;;
+            Windows-X64) ASSET="librift_ffi-windows-x86_64.dll" ;;
+            *) echo "no librift_ffi asset for ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
+          curl -fsSL -o "${RUNNER_TEMP}/${ASSET}" \
+            "https://github.com/EtaCassiopeia/rift/releases/download/v${VER}/${ASSET}"
+          echo "RIFT_FFI_LIB=${RUNNER_TEMP}/${ASSET}" >> "$GITHUB_ENV"
+      - name: Replay the corpus over the ${{ matrix.lane.transport }} transport
+        shell: bash
         run: ./mvnw -B -ntp -pl rift-java-conformance -am verify
