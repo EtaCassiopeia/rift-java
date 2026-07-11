@@ -21,10 +21,7 @@ final class KnownFidelityGaps {
 
     /** Fixture number → the core issue tracking why it cannot round-trip yet. */
     private static final Map<Integer, String> GAPS = Map.of(
-            3, "#55",   // `copy` object-form not parsed (WireFormatException)
-            14, "#55",  // `copy` object-form not parsed
-            16, "#55",  // `copy` object-form not parsed
-            20, "#55",  // `wait` string-form not parsed
+            20, "#56",  // `wait` string-form now parses (#55); remaining round-trip gap is proxy/fault serialization
             4, "#56",   // latency fault emits default minMs/maxMs:0 alongside fixed `ms`
             7, "#56");  // proxy response emits default addWaitBehavior
 

@@ -137,6 +137,11 @@ public final class IsSpec implements ResponseSpec {
         return withBehavior(new Behavior.Wait(new io.github.etacassiopeia.rift.model.WaitSpec.Inject(script)));
     }
 
+    /** Delays the response by a bare-string {@code wait} (a function body / named latency), round-tripped verbatim. */
+    public IsSpec waitScript(String source) {
+        return withBehavior(new Behavior.Wait(new io.github.etacassiopeia.rift.model.WaitSpec.Script(source)));
+    }
+
     /** Post-processes the response with the given decorator script (a {@code decorate} behavior). */
     public IsSpec decorate(String script) {
         return withBehavior(new Behavior.Decorate(script));
@@ -158,11 +163,16 @@ public final class IsSpec implements ResponseSpec {
         return new IsSpec(statusCode, headers, body, mode, behaviors, fault, true);
     }
 
-    /** Adds a {@code copy} behavior entry per {@link CopySpec} given. */
+    /** Adds a {@code copy} behavior entry per {@link CopySpec} given (the array wire form). */
     public IsSpec copy(CopySpec... copies) {
         List<io.github.etacassiopeia.rift.model.CopyEntry> entries =
                 Arrays.stream(copies).map(CopySpec::build).toList();
         return withBehavior(new Behavior.Copy(entries));
+    }
+
+    /** Adds a single {@code copy} entry in the engine's object wire form (not wrapped in an array). */
+    public IsSpec copyObject(CopySpec copy) {
+        return withBehavior(new Behavior.Copy(List.of(copy.build()), true));
     }
 
     /**
@@ -174,6 +184,11 @@ public final class IsSpec implements ResponseSpec {
     public IsSpec lookup(LookupSpec... lookups) {
         JsonArray array = new JsonArray(Arrays.stream(lookups).map(LookupSpec::build).toList());
         return withBehavior(new Behavior.Unknown("lookup", array));
+    }
+
+    /** Adds a single {@code lookup} entry in the engine's object wire form (not wrapped in an array). */
+    public IsSpec lookupObject(LookupSpec lookup) {
+        return withBehavior(new Behavior.Unknown("lookup", lookup.build()));
     }
 
     /**
