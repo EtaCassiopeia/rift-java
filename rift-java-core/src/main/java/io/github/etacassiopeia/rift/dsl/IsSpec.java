@@ -200,7 +200,7 @@ public final class IsSpec implements ResponseSpec {
 
     /** Injects an error fault: {@code probability} of the time, respond with {@code status} instead. */
     public IsSpec withErrorFault(double probability, int status) {
-        return withErrorFault(probability, status, Optional.empty());
+        return withErrorFault(probability, status, Optional.empty(), Map.of());
     }
 
     /**
@@ -209,11 +209,20 @@ public final class IsSpec implements ResponseSpec {
      * body is text); to send a JSON error body, pass its serialized text.
      */
     public IsSpec withErrorFault(double probability, int status, String body) {
-        return withErrorFault(probability, status, Optional.of(body));
+        return withErrorFault(probability, status, Optional.of(body), Map.of());
     }
 
-    private IsSpec withErrorFault(double probability, int status, Optional<String> body) {
-        RiftErrorFault error = new RiftErrorFault(probability, status, body, Map.of());
+    /**
+     * Injects an error fault carrying response {@code headers}: {@code probability} of the time,
+     * respond with {@code status}, {@code body} and {@code headers} instead (e.g. a {@code
+     * Retry-After} on a synthesized 503).
+     */
+    public IsSpec withErrorFault(double probability, int status, String body, Map<String, String> headers) {
+        return withErrorFault(probability, status, Optional.of(body), headers);
+    }
+
+    private IsSpec withErrorFault(double probability, int status, Optional<String> body, Map<String, String> headers) {
+        RiftErrorFault error = new RiftErrorFault(probability, status, body, headers);
         return withFault(cfg -> new RiftFaultConfig(cfg.latency(), Optional.of(error), cfg.tcp()));
     }
 

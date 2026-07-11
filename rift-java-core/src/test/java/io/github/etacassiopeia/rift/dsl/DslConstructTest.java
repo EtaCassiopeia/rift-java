@@ -391,6 +391,16 @@ class DslConstructTest {
         assertEquals(750L, rift.fault().orElseThrow().latency().orElseThrow().ms().orElseThrow());
     }
 
+    @Test
+    void errorFaultCarriesResponseHeaders() {
+        Response.Is response = (Response.Is) status(200)
+                .withErrorFault(1.0, 503, "DOWN", Map.of("Retry-After", "30")).build();
+        var error = response.rift().orElseThrow().fault().orElseThrow().error().orElseThrow();
+        assertEquals(503, error.status());
+        assertEquals("DOWN", error.body().orElseThrow());
+        assertEquals("30", error.headers().get("Retry-After"));
+    }
+
     // ------------------------------------------------------------------
     // Inject / script
     // ------------------------------------------------------------------

@@ -88,3 +88,37 @@ jobs:
           cache: maven
       - name: Run RiftContainer integration tests against Docker
         run: ./mvnw -B -ntp -pl rift-java-testcontainers -am test
+
+  # The M1 conformance gate: replays the engine's published SDK conformance corpus over the
+  # remote/spawn transport (parse fidelity + DSL expressibility + engine _verify replay). The corpus
+  # is version-locked to the pinned engine (rift.engine.version), downloaded from that engine release;
+  # the engine binary itself is fetched by Rift.spawn's BinaryResolver on first use. RIFT_IT=1 un-gates
+  # the engine replay lane (CorpusReplayIT self-skips everywhere else).
+  conformance:
+    name: conformance corpus (remote transport, JDK 17)
+    runs-on: ubuntu-latest
+    env:
+      RIFT_IT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Download the version-locked conformance corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="$(./mvnw -q -N help:evaluate -Dexpression=rift.engine.version -DforceStdout)"
+          echo "Pinned engine/corpus version: v${VER}"
+          mkdir -p rift-java-conformance/target/corpus
+          curl -fsSL -o /tmp/sdk-conformance.tar.gz \
+            "https://github.com/EtaCassiopeia/rift/releases/download/v${VER}/sdk-conformance-v${VER}.tar.gz"
+          tar -xzf /tmp/sdk-conformance.tar.gz -C rift-java-conformance/target/corpus
+          # Point at the parent dir; Corpus.descend() resolves the single extracted sdk-conformance-* child,
+          # so this survives a change to the tarball's top-level directory name.
+          echo "RIFT_CORPUS_ROOT=$(pwd)/rift-java-conformance/target/corpus" >> "$GITHUB_ENV"
+      - name: Replay the corpus over the remote/spawn transport
+        run: ./mvnw -B -ntp -pl rift-java-conformance -am verify

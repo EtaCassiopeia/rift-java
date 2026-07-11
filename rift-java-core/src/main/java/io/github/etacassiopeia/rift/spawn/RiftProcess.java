@@ -163,10 +163,14 @@ public final class RiftProcess {
         }
     }
 
-    private static List<String> buildCommand(Path binary, SpawnOptions opts, int port, Path pidFile) {
+    // Package-private (not private) so RiftProcessTest can pin the argument order: the rift CLI
+    // rejects the admin options unless they precede the `start` subcommand.
+    static List<String> buildCommand(Path binary, SpawnOptions opts, int port, Path pidFile) {
+        // The rift CLI takes its admin-API options as GLOBAL options that must precede the
+        // subcommand (`rift [OPTIONS] start`); clap rejects them when placed after `start`. So every
+        // option is added first and the `start` subcommand goes last.
         List<String> cmd = new ArrayList<>();
         cmd.add(binary.toString());
-        cmd.add("start");
         cmd.add("--port");
         cmd.add(Integer.toString(port));
         cmd.add("--host");
@@ -182,6 +186,7 @@ public final class RiftProcess {
         cmd.add("--nologfile");
         cmd.add("--pidfile");
         cmd.add(pidFile.toString());
+        cmd.add("start");
         return cmd;
     }
 
