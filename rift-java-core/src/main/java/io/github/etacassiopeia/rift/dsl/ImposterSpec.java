@@ -1,6 +1,7 @@
 package io.github.etacassiopeia.rift.dsl;
 
 import io.github.etacassiopeia.rift.json.JsonValue;
+import io.github.etacassiopeia.rift.model.FlowStateSupport;
 import io.github.etacassiopeia.rift.model.ImposterDefinition;
 import io.github.etacassiopeia.rift.model.RiftConfig;
 import io.github.etacassiopeia.rift.model.RiftConnectionPoolConfig;
@@ -249,10 +250,17 @@ public final class ImposterSpec {
         if (cert.isPresent() != key.isPresent()) {
             throw new IllegalArgumentException("https(...) requires both a certificate and a key, or neither");
         }
-        return new ImposterDefinition(
+        ImposterDefinition def = new ImposterDefinition(
                 port, host, protocol, cert, key, Optional.of(name),
                 recordRequests, recordMatches, stubs, defaultResponse.map(IsSpec::buildIsResponse),
                 defaultForward, allowCors, strictBehaviors, serviceName, serviceInfo, buildRiftConfig(), Map.of());
+        if (FlowStateSupport.hasSpaceStub(def) && !FlowStateSupport.hasHeaderFlowIdSource(def)) {
+            throw new IllegalArgumentException(
+                    "space stubs can never match without a header flow-id source (the engine's flow-id "
+                            + "default is imposter_port) — declare "
+                            + ".flowState(inMemoryFlowState().flowIdFromHeader(\"X-Your-Header\"))");
+        }
+        return def;
     }
 
     private Optional<RiftConfig> buildRiftConfig() {

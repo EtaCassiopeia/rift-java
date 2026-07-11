@@ -51,8 +51,20 @@ public interface Imposter {
 
     Scenarios scenarios();
 
+    /**
+     * A per-space (correlated-isolation) view. Spaces require the imposter to declare a header-form
+     * {@code flowIdSource} ({@code flowIdFromHeader}); the engine's flow-id source otherwise defaults
+     * to the port and space stubs never match. This accessor logs one advisory warning if that
+     * configuration is missing (it never throws — admin-only list/delete workflows remain valid).
+     */
     Space space(String flowId);
 
+    /**
+     * The runtime flow-state store for a flow id. The engine backs this with a real store only when
+     * the def declares one — an explicit {@code _rift.flowState}, a scenario stub, or a {@code
+     * _rift.script} stub; otherwise reads return empty (a no-op store). This accessor logs one
+     * advisory warning if no such trigger is present.
+     */
     FlowState flowState(String flowId);
 
     /** Verifies at least one recorded request matched {@code match}'s predicates. */

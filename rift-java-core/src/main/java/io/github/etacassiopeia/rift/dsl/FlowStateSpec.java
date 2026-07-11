@@ -54,7 +54,11 @@ public final class FlowStateSpec {
         return new FlowStateSpec(backend, duration.toSeconds(), flowIdSource, redisUrl, redisPoolSize, redisKeyPrefix);
     }
 
-    /** Correlates flow state using the named request header rather than the imposter's port. */
+    /**
+     * Correlates flow state using the named request header rather than the imposter's port. Required
+     * for per-space stubs ({@link StubSpec#inSpace}) to match: without it the engine resolves every
+     * request's flow id to the port, so a space stub never matches.
+     */
     public FlowStateSpec flowIdFromHeader(String name) {
         return new FlowStateSpec(backend, ttlSeconds, Optional.of("header:" + name), redisUrl, redisPoolSize, redisKeyPrefix);
     }

@@ -147,7 +147,12 @@ public final class StubSpec implements RequestMatch {
         return new StubSpec(predicates, responses, scenarioName, requiredScenarioState, Optional.of(state), space, id, routePattern);
     }
 
-    /** Isolates this stub's correlated state within the given flow/space id. */
+    /**
+     * Isolates this stub's correlated state within the given flow/space id. The imposter must declare
+     * a header-form flow-id source ({@link FlowStateSpec#flowIdFromHeader}) — the engine's flow-id
+     * source defaults to the imposter port, so a space stub can otherwise never match. {@link
+     * ImposterSpec#build()} throws if a space stub is present without one.
+     */
     public StubSpec inSpace(String flowId) {
         return new StubSpec(predicates, responses, scenarioName, requiredScenarioState, newScenarioState, Optional.of(flowId), id, routePattern);
     }

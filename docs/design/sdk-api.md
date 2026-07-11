@@ -323,6 +323,17 @@ public interface FlowState {
 `Imposter`, `Space`, `FlowState`, `Scenarios` are thin transport-backed views — no client-side
 caching, every call hits the engine (test code wants truth, not staleness).
 
+**Flow-state / spaces configuration (uniform across transports).** The engine backs the flow-state
+and per-space APIs with a real store only when the def declares one — an explicit `_rift.flowState`,
+a scenario stub (`scenarioName`/`requiredScenarioState`/`newScenarioState`), or a `_rift.script`
+stub; otherwise it uses a silent no-op store (reads return empty). Separately, a per-space stub only
+matches when a header-form `flowIdSource` is configured (`flowIdFromHeader(...)`), because the
+engine's flow-id source defaults to the imposter port. The SDK does **not** auto-inject a flow store
+(a transport is a faithful wire mapping — it never rewrites user input); instead it fails fast and
+warns: `ImposterSpec.build()` throws if a space stub is declared without a header `flowIdSource`, and
+`Imposter.space()`/`flowState()` log one advisory warning on a source-less / trigger-less def. Declare
+`flowState(inMemoryFlowState().flowIdFromHeader("X-Your-Header"))` for spaces.
+
 ## 7. DSL v2 — closing the surface gaps
 
 `RiftDsl` remains the single static-import hub (WireMock model). Grammar and existing entry
