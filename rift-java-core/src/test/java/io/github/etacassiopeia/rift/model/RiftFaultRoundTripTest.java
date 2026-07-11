@@ -3,6 +3,8 @@ package io.github.etacassiopeia.rift.model;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -121,6 +123,18 @@ class RiftFaultRoundTripTest {
         assertEquals("1", error.headers().get("X-Err"));
     }
 
+    private static final String TCP_PROBABILISTIC_JSON = """
+            {
+              "predicates": [{"equals": {"path": "/tcp"}}],
+              "responses": [
+                {
+                  "is": {"statusCode": 200},
+                  "_rift": {"fault": {"tcp": {"probability": 0.1, "type": "CONNECTION_RESET_BY_PEER"}}}
+                }
+              ]
+            }
+            """;
+
     @Test
     void tcpFaultRoundTrips() {
         RoundTripAssertions.assertRoundTrips(TCP_JSON, Stub::fromJson, Stub::toJson);
@@ -130,6 +144,34 @@ class RiftFaultRoundTripTest {
     void tcpFaultIsTyped() {
         Stub stub = Stub.fromJson(TCP_JSON);
         Response.Is is = (Response.Is) stub.responses().get(0);
-        assertEquals("CONNECTION_RESET_BY_PEER", is.rift().orElseThrow().fault().orElseThrow().tcp().orElseThrow());
+        RiftTcpFault tcp = is.rift().orElseThrow().fault().orElseThrow().tcp().orElseThrow();
+        RiftTcpFault.Bare bare = assertInstanceOf(RiftTcpFault.Bare.class, tcp);
+        assertEquals("CONNECTION_RESET_BY_PEER", bare.type());
+        assertEquals(1.0, bare.probability());
+    }
+
+    @Test
+    void probabilisticTcpFaultRoundTrips() {
+        RoundTripAssertions.assertRoundTrips(TCP_PROBABILISTIC_JSON, Stub::fromJson, Stub::toJson);
+    }
+
+    @Test
+    void probabilisticTcpFaultIsTyped() {
+        Stub stub = Stub.fromJson(TCP_PROBABILISTIC_JSON);
+        Response.Is is = (Response.Is) stub.responses().get(0);
+        RiftTcpFault tcp = is.rift().orElseThrow().fault().orElseThrow().tcp().orElseThrow();
+        RiftTcpFault.Probabilistic p = assertInstanceOf(RiftTcpFault.Probabilistic.class, tcp);
+        assertEquals(0.1, p.probability());
+        assertEquals("CONNECTION_RESET_BY_PEER", p.type());
+    }
+
+    @Test
+    void probabilisticTcpFaultRequiresProbability() {
+        // The object form exists solely to carry probability — an object without it is a wire error,
+        // not a second spelling of the bare form.
+        assertThrows(WireFormatException.class, () -> Stub.fromJson("""
+                {"predicates": [], "responses": [
+                  {"is": {"statusCode": 200}, "_rift": {"fault": {"tcp": {"type": "CONNECTION_RESET_BY_PEER"}}}}]}
+                """));
     }
 }

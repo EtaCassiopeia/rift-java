@@ -22,6 +22,7 @@ import static io.github.etacassiopeia.rift.dsl.RiftDsl.onRequest;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.proxyTo;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.redisFlowState;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -66,7 +67,18 @@ class DslV2WireTest {
     @Test
     void tcpFaultEmitsFaultName() {
         Response.Is is = (Response.Is) ok().withTcpFault(Fault.CONNECTION_RESET_BY_PEER).build();
-        assertEquals("CONNECTION_RESET_BY_PEER", is.rift().orElseThrow().fault().orElseThrow().tcp().orElseThrow());
+        var tcp = is.rift().orElseThrow().fault().orElseThrow().tcp().orElseThrow();
+        assertInstanceOf(io.github.etacassiopeia.rift.model.RiftTcpFault.Bare.class, tcp, "withTcpFault(Fault) is the bare form");
+        assertEquals("CONNECTION_RESET_BY_PEER", tcp.type());
+    }
+
+    @Test
+    void probabilisticTcpFaultEmitsObjectForm() {
+        Response.Is is = (Response.Is) ok().withTcpFault(0.1, Fault.CONNECTION_RESET_BY_PEER).build();
+        var tcp = is.rift().orElseThrow().fault().orElseThrow().tcp().orElseThrow();
+        var p = assertInstanceOf(io.github.etacassiopeia.rift.model.RiftTcpFault.Probabilistic.class, tcp);
+        assertEquals(0.1, p.probability());
+        assertEquals("CONNECTION_RESET_BY_PEER", p.type());
     }
 
     // ---- IsSpec: behaviors ----
@@ -201,7 +213,7 @@ class DslV2WireTest {
                 .withErrorFault(0.1, 503).withTcpFault(Fault.CONNECTION_RESET_BY_PEER).build();
         var fault = is.rift().orElseThrow().fault().orElseThrow();
         assertEquals(503, fault.error().orElseThrow().status());
-        assertEquals("CONNECTION_RESET_BY_PEER", fault.tcp().orElseThrow());
+        assertEquals("CONNECTION_RESET_BY_PEER", fault.tcp().orElseThrow().type());
     }
 
     @Test

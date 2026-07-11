@@ -276,6 +276,12 @@ final class DslFixtures {
                                         .willReturn(status(200)
                                                 .withTextBody("you will never see this")
                                                 .withTcpFault(Fault.CONNECTION_RESET_BY_PEER))),
+                        named("TCP — reset the connection 10% of the time (probabilistic object form)",
+                                onRequest().withPath(RiftDsl.equals("/faults/tcp-flaky"))
+                                        .willReturn(status(200)
+                                                .withHeader("Content-Type", "application/json")
+                                                .withJsonBody("{\"endpoint\":\"/faults/tcp-flaky\",\"note\":\"10% chance of a connection reset\"}")
+                                                .withTcpFault(0.1, Fault.CONNECTION_RESET_BY_PEER))),
                         named("Baseline — no fault, for comparison",
                                 onRequest().withPath(RiftDsl.equals("/faults/healthy"))
                                         .willReturn(status(200)

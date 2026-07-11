@@ -10,6 +10,7 @@ import io.github.etacassiopeia.rift.model.IsResponse;
 import io.github.etacassiopeia.rift.model.Response;
 import io.github.etacassiopeia.rift.model.ResponseMode;
 import io.github.etacassiopeia.rift.model.RiftErrorFault;
+import io.github.etacassiopeia.rift.model.RiftTcpFault;
 import io.github.etacassiopeia.rift.model.RiftFaultConfig;
 import io.github.etacassiopeia.rift.model.RiftLatencyFault;
 import io.github.etacassiopeia.rift.model.RiftResponseExtension;
@@ -242,12 +243,21 @@ public final class IsSpec implements ResponseSpec {
     }
 
     /**
-     * Injects a raw TCP-level fault, e.g. {@link Fault#CONNECTION_RESET_BY_PEER}. Unlike {@link
-     * #withLatencyFault} and {@link #withErrorFault}, this carries no probability: the model's
-     * {@code RiftFaultConfig.tcp} is a bare {@code Optional<String>}.
+     * Injects a raw TCP-level fault, e.g. {@link Fault#CONNECTION_RESET_BY_PEER}, that always fires
+     * (the bare wire form). For a probabilistic TCP fault use {@link #withTcpFault(double, Fault)}.
      */
     public IsSpec withTcpFault(Fault kind) {
-        return withFault(cfg -> new RiftFaultConfig(cfg.latency(), cfg.error(), Optional.of(kind.name())));
+        return withFault(cfg -> new RiftFaultConfig(cfg.latency(), cfg.error(),
+                Optional.of(new RiftTcpFault.Bare(kind.name()))));
+    }
+
+    /**
+     * Injects a probabilistic raw TCP-level fault that fires with the given {@code probability}
+     * (the object wire form). Requires a rift engine &ge; 0.13.2 (rift#531).
+     */
+    public IsSpec withTcpFault(double probability, Fault kind) {
+        return withFault(cfg -> new RiftFaultConfig(cfg.latency(), cfg.error(),
+                Optional.of(new RiftTcpFault.Probabilistic(probability, kind.name()))));
     }
 
     private IsSpec withFault(UnaryOperator<RiftFaultConfig> mutator) {

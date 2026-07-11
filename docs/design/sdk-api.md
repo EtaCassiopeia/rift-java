@@ -395,7 +395,8 @@ IsSpec withLatencyFault(double probability, Duration min, Duration max)
 IsSpec withLatencyFault(double probability, Duration fixed)
 IsSpec withErrorFault(double probability, int status)
 IsSpec withErrorFault(double probability, int status, JsonValue body)
-IsSpec withTcpFault(double probability, Fault kind)
+IsSpec withTcpFault(Fault kind)                          // always fires (bare wire form)
+IsSpec withTcpFault(double probability, Fault kind)      // probabilistic object form; requires rift >= 0.13.2 (rift#531)
 
 // helper factories on RiftDsl:
 static CopySpec copyFrom(String from)                    // .into("$TOKEN").using(regex(...)|jsonPath(...)|xPath(...))
