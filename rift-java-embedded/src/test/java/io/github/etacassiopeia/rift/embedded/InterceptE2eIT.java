@@ -144,6 +144,23 @@ class InterceptE2eIT {
         }
     }
 
+    @Test
+    void generateCaReturnsCertAndKey() throws Exception {
+        try (Rift rift = embedded()) {
+            Intercept intercept = rift.intercept(InterceptOptions.builder().generateCa().build());
+            try {
+                Intercept.CaMaterial ca = intercept.caMaterial().orElseThrow(
+                        () -> new AssertionError("generateCa() must return the generated CA material"));
+                assertTrue(ca.certPem().contains("BEGIN CERTIFICATE"), ca.certPem());
+                assertTrue(ca.keyPem().contains("PRIVATE KEY"), "the private key is returned");
+                // The returned cert is the CA the engine actually uses.
+                assertEquals(parseCert(ca.certPem()), parseCert(intercept.trust().caPem()));
+            } finally {
+                intercept.close();
+            }
+        }
+    }
+
     private static String resource(String name) throws Exception {
         try (java.io.InputStream in = InterceptE2eIT.class.getResourceAsStream(name)) {
             return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);

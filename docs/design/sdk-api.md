@@ -547,10 +547,11 @@ public interface InterceptTrust {
 }
 
 public final class InterceptOptions {                // builder
-  // port (0 = OS-assigned), host; committed CA (both-or-neither, else ephemeral) supplied as:
-  //   ca(Path cert, Path key) | ca(String cert, String key) | ca(byte[] cert, byte[] key) | ca(KeyStore, char[])
-  // in-memory forms materialize to a private temp file the engine loads (embedded; remote needs it
-  // on the engine's fs — containerized byte-shipping is engine-gated)
+  // port (0 = OS-assigned), host (IP literal); committed CA (both-or-neither, else ephemeral) as:
+  //   ca(Path cert, Path key)                         // engine reads the files from its own fs
+  //   ca(String|byte[] cert, key) | ca(KeyStore, pw)  // inline PEM in the start body (rift >= 0.13.4) — no mount
+  //   generateCa()                                    // engine mints one; retrieve via intercept.caMaterial()
+  // -> intercept.caMaterial(): Optional<Intercept.CaMaterial(String certPem, String keyPem)> (generateCa only)
 }
 ```
 

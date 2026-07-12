@@ -29,6 +29,7 @@ final class InterceptImpl implements Intercept {
     private final RiftTransport transport;
     private final InetSocketAddress address;
     private final URI uri;
+    private final CaMaterial caMaterial;
 
     private volatile InterceptTrust trust;
 
@@ -43,6 +44,10 @@ final class InterceptImpl implements Intercept {
         }
         this.uri = URI.create(url.value());
         this.address = new InetSocketAddress(uri.getHost(), port.asInt());
+        // Present only when the listener was started with generateCa() (returnCaKey).
+        this.caMaterial = (obj.get("caCertPem") instanceof JsonString cert
+                && obj.get("caKeyPem") instanceof JsonString key)
+                ? new CaMaterial(cert.value(), key.value()) : null;
     }
 
     /** Attach mode: bind to a listener already started at engine launch, at the given endpoint. */
@@ -50,6 +55,7 @@ final class InterceptImpl implements Intercept {
         this.transport = transport;
         this.uri = URI.create("http://" + host + ":" + port);
         this.address = new InetSocketAddress(host, port);
+        this.caMaterial = null;
     }
 
     @Override
@@ -176,6 +182,11 @@ final class InterceptImpl implements Intercept {
     @Override
     public void clearRules() {
         transport.interceptClearRules();
+    }
+
+    @Override
+    public java.util.Optional<CaMaterial> caMaterial() {
+        return java.util.Optional.ofNullable(caMaterial);
     }
 
     @Override
