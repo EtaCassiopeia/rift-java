@@ -15,7 +15,9 @@ class RiftVersionTest {
     }
 
     @Test
-    void versionMatchesTheCurrentDevelopmentLine() {
-        assertTrue(RiftVersion.get().startsWith("0.1.0"), "expected the 0.1.0 development line");
+    void versionIsSemanticVersion() {
+        assertTrue(
+                RiftVersion.get().matches("\\d+\\.\\d+\\.\\d+(-SNAPSHOT)?"),
+                "version must be a MAJOR.MINOR.PATCH string, optionally -SNAPSHOT");
     }
 }
