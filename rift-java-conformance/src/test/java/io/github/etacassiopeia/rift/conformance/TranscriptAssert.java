@@ -36,19 +36,6 @@ final class TranscriptAssert {
         this.http = http;
     }
 
-    /**
-     * A short settle before each step of a <em>stateful</em> ({@code repeat}-cycle) {@code _verify}
-     * sequence. Works around a residual engine race (rift#565): the per-imposter response-cycle counter
-     * commits asynchronously, both after {@code create} and after each response, so over the zero-latency
-     * in-process embedded transport a next request can observe a stale cycle position — flaking the
-     * ubuntu EMBEDDED lane at any step (including step 0, a freshly-created imposter serving the cycle's
-     * tail before its head). 0.13.3 (rift#586/#576) reduced but did not eliminate it; #79's removal was
-     * premature. The out-of-process spawn transport and macOS have enough latency to mask it. Single-step
-     * (stateless) sequences have no cycle to race, so they never settle. Tunable via
-     * {@code -Drift.conformance.verify.settleMs}.
-     */
-    private static final long SEQUENCE_SETTLE_MS = Long.getLong("rift.conformance.verify.settleMs", 100L);
-
     /** Replays every stub's {@code _verify} sequence against {@code http://<host>:<port>}. */
     void replay(ImposterDefinition imposter, String host, int port) {
         String base = "http://" + host + ":" + port;
@@ -59,29 +46,11 @@ final class TranscriptAssert {
                 continue;
             }
             JsonArray sequence = sequenceOf(verify.get());
-            boolean stateful = sequence.items().size() > 1;
             for (int i = 0; i < sequence.items().size(); i++) {
-                // Settle before every request of a stateful sequence — including step 0, since the race
-                // is at the create→first-request boundary too, not only between steps.
-                if (stateful) {
-                    settleForCycleCommit();
-                }
                 JsonObject step = asObject(sequence.items().get(i));
                 String where = "stub[" + s + "]._verify.sequence[" + i + "]";
                 assertStep(base, step, where);
             }
-        }
-    }
-
-    private static void settleForCycleCommit() {
-        if (SEQUENCE_SETTLE_MS <= 0) {
-            return;
-        }
-        try {
-            Thread.sleep(SEQUENCE_SETTLE_MS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError("interrupted settling before a _verify step", e);
         }
     }
 
