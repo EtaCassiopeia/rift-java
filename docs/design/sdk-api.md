@@ -381,6 +381,8 @@ public sealed interface ResponseSpec permits IsSpec, ProxySpec, FaultSpec, Injec
 ### 7.3 New `IsSpec` methods (full behavior + `_rift` coverage)
 
 ```java
+// RiftDsl factory: okJsonRaw(String) serves the JSON verbatim (byte-for-byte, no reparse),
+// unlike okJson(String) which parses + canonicalizes — for payloads whose exact form matters.
 IsSpec withBinaryBody(byte[] bytes)                      // base64 + _mode=binary
 IsSpec withBodyFromCodec(Object pojo)                    // via RiftBodyCodec SPI (§10)
 IsSpec copy(CopySpec... copies)                          // _behaviors.copy (array wire form)

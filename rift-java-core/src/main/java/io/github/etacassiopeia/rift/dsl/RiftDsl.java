@@ -280,9 +280,23 @@ public final class RiftDsl {
         return IsSpec.is("200").withHeader("Content-Type", "application/json").withJsonBody(body);
     }
 
-    /** A 200 response with a {@code Content-Type: application/json} header and the body parsed from {@code jsonText}. */
+    /**
+     * A 200 response with a {@code Content-Type: application/json} header and the body <em>parsed</em>
+     * from {@code jsonText} — the payload is reparsed and re-serialized, so its exact byte form
+     * (whitespace, key order) is not preserved. Use {@link #okJsonRaw(String)} to serve the text verbatim.
+     */
     public static IsSpec okJson(String jsonText) {
         return okJson(json(jsonText));
+    }
+
+    /**
+     * A 200 response with a {@code Content-Type: application/json} header and {@code jsonText} served
+     * <em>verbatim</em> — byte-for-byte, no reparse or re-serialization. Use this for a payload whose
+     * exact form matters (a signed body, a datafile a client fingerprints), where {@link #okJson(String)}'s
+     * canonicalization would be a surprise.
+     */
+    public static IsSpec okJsonRaw(String jsonText) {
+        return IsSpec.is("200").withHeader("Content-Type", "application/json").withTextBody(jsonText);
     }
 
     /**
