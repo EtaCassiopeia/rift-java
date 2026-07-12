@@ -37,6 +37,25 @@ wire-level `forward` action as `forward` itself, pointed at `imposter.port()`; a
 from `intercept.rules()` therefore only ever reports `RuleKind.SERVE` or `RuleKind.FORWARD` — the
 engine has no way to echo back that a `forward` action originated from `redirectTo`.
 
+### Predicate-scoped rules and catch-alls
+
+The three methods above key on the whole host. For finer control, `intercept.rule()` builds a rule
+with **request predicates** (the same DSL stubs use — path, method, headers, body) and an **optional
+host** — the engine's full `(host?, predicates, action)` rule shape:
+
+```java
+// Serve /health inline, but let everything else on this host fall through.
+intercept.rule().host("example.com").when(onGet("/health")).serve(ok());
+
+// A catch-all (no host) matching a path across every intercepted host.
+intercept.rule().when(onPost("/api/**")).redirectTo(partnerImposter);
+
+// Header/method scoping is just more predicates.
+intercept.rule().host("payments.internal").when(onGet("/status")).forward("localhost:9443");
+```
+
+A rule read back via `intercept.rules()` exposes its predicates through `InterceptRule.predicates()`.
+
 ```java
 List<InterceptRule> rules = intercept.rules();   // in the order they were added
 intercept.clearRules();                          // removes every rule; the listener stays up

@@ -8,6 +8,7 @@ import io.github.etacassiopeia.rift.json.JsonObject;
 import io.github.etacassiopeia.rift.json.JsonString;
 import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.IsResponse;
+import io.github.etacassiopeia.rift.model.Predicate;
 import io.github.etacassiopeia.rift.model.Response;
 import io.github.etacassiopeia.rift.transport.RiftTransport;
 
@@ -61,40 +62,58 @@ final class InterceptImpl implements Intercept {
 
     @Override
     public InterceptRule serve(String host, IsSpec response) {
-        JsonObject rule = ruleJson(host, JsonObject.builder().put("serve", toServeStub(response)).build());
-        transport.interceptAddRules(rule);
-        return new InterceptRule(host, RuleKind.SERVE, rule);
+        return addServeRule(host, List.of(), response, RuleKind.SERVE);
     }
 
     @Override
     public InterceptRule forward(String host, String hostPort) {
-        JsonObject rule = forwardRuleJson(host, parsePort(hostPort));
-        transport.interceptAddRules(rule);
-        return new InterceptRule(host, RuleKind.FORWARD, rule);
+        return addForwardRule(host, List.of(), parsePort(hostPort), RuleKind.FORWARD);
     }
 
     @Override
     public InterceptRule redirectTo(String host, Imposter imposter) {
-        JsonObject rule = forwardRuleJson(host, imposter.port());
-        transport.interceptAddRules(rule);
         // REDIRECT is an SDK-level label only: the wire action is identical to forward()'s (see
-        // RuleKind), so this rule is indistinguishable from a plain forward() once round-tripped
-        // through rules().
-        return new InterceptRule(host, RuleKind.REDIRECT, rule);
+        // RuleKind), so this rule is indistinguishable from a plain forward() once round-tripped.
+        return addForwardRule(host, List.of(), imposter.port(), RuleKind.REDIRECT);
     }
 
-    private static JsonObject forwardRuleJson(String host, int port) {
+    @Override
+    public InterceptRuleBuilder rule() {
+        return new InterceptRuleBuilder(this);
+    }
+
+    // Shared by the host-only methods above and by InterceptRuleBuilder (predicate-scoped, host-optional).
+    InterceptRule addServeRule(String host, List<Predicate> predicates, IsSpec response, RuleKind kind) {
+        JsonObject action = JsonObject.builder().put("serve", toServeStub(response)).build();
+        JsonObject rule = ruleJson(host, predicates, action);
+        transport.interceptAddRules(rule);
+        return new InterceptRule(host, kind, rule);
+    }
+
+    InterceptRule addForwardRule(String host, List<Predicate> predicates, int port, RuleKind kind) {
         JsonObject action = JsonObject.builder()
                 .put("forward", JsonObject.builder().put("port", JsonNumber.of(port)).build())
                 .build();
-        return ruleJson(host, action);
+        JsonObject rule = ruleJson(host, predicates, action);
+        transport.interceptAddRules(rule);
+        return new InterceptRule(host, kind, rule);
     }
 
-    private static JsonObject ruleJson(String host, JsonObject action) {
-        return JsonObject.builder()
-                .put("host", new JsonString(host))
-                .put("action", action)
-                .build();
+    /**
+     * The engine's {@code InterceptRule} wire shape: an <em>optional</em> {@code host} (absent = match
+     * any intercepted host), the {@code predicates} matched like stub predicates (omitted when empty),
+     * and the action — see {@code intercept_rules.rs}.
+     */
+    private static JsonObject ruleJson(String host, List<Predicate> predicates, JsonObject action) {
+        JsonObject.Builder builder = JsonObject.builder();
+        if (host != null) {
+            builder.put("host", new JsonString(host));
+        }
+        if (!predicates.isEmpty()) {
+            builder.put("predicates", new JsonArray(
+                    predicates.stream().map(p -> (JsonValue) JsonValue.parse(p.toJson())).toList()));
+        }
+        return builder.put("action", action).build();
     }
 
     /**
@@ -103,7 +122,7 @@ final class InterceptImpl implements Intercept {
      * {@code ForwardTarget { port: u16 }} in {@code intercept_rules.rs}) — any host component here
      * is for this method's own convenience only and is never sent over the wire.
      */
-    private static int parsePort(String hostPort) {
+    static int parsePort(String hostPort) {
         int colon = hostPort.lastIndexOf(':');
         String portPart = colon >= 0 ? hostPort.substring(colon + 1) : hostPort;
         try {

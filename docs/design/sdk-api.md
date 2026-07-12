@@ -525,6 +525,7 @@ public interface Intercept extends AutoCloseable {
   InterceptRule serve(String host, IsSpec response); // rule: answer host directly
   InterceptRule forward(String host, String hostPort);
   InterceptRule redirectTo(String host, Imposter imposter);
+  InterceptRuleBuilder rule();                       // predicate-scoped + optional-host: rule().host(h).when(match).serve/forward/redirectTo
   List<InterceptRule> rules(); void clearRules();
   InterceptTrust trust();
   @Override void close();                            // clears rules; stops listener where supported
