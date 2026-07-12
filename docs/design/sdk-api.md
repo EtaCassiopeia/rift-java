@@ -464,7 +464,12 @@ List<RecordedRequest> hits = users.recorded(onGet("/api/users/1"));
 ```
 
 ```java
-public interface RequestMatch { List<Predicate> predicates(); }
+public interface RequestMatch {
+  List<Predicate> predicates();
+  // verification-path escape hatch (mirrors the raw-JSON creation hatches — §1.3):
+  static RequestMatch of(List<Predicate> predicates);   static RequestMatch of(Predicate... predicates);
+  static RequestMatch ofJson(JsonValue predicateArray); static RequestMatch ofJson(String predicateArrayJson);
+}
 
 public final class VerificationTimes {                    // factories re-exported on RiftDsl
   static VerificationTimes times(int n);      static VerificationTimes exactly(int n);   // alias
