@@ -1,9 +1,12 @@
 package io.github.etacassiopeia.rift.junit5;
 
+import io.github.etacassiopeia.rift.ConnectOptions;
+import io.github.etacassiopeia.rift.EmbeddedOptions;
 import io.github.etacassiopeia.rift.Imposter;
 import io.github.etacassiopeia.rift.RecordedRequest;
 import io.github.etacassiopeia.rift.Recording;
 import io.github.etacassiopeia.rift.Rift;
+import io.github.etacassiopeia.rift.SpawnOptions;
 import io.github.etacassiopeia.rift.dsl.ImposterSpec;
 import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.ImposterDefinition;
@@ -77,7 +80,7 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
     @Override
     public void beforeAll(ExtensionContext context) {
         ResolvedConfig resolved = resolve(context);
-        Rift rift = buildRift(resolved.transport(), resolved.adminUri());
+        Rift rift = buildRift(resolved.transport(), resolved.adminUri(), resolved.engineOptions());
         try {
             Map<String, Imposter> impostersByName = createImposters(rift, resolved.imposters());
             RiftTestContext riftTestContext =
@@ -254,7 +257,7 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
     private ResolvedConfig resolve(ExtensionContext context) {
         if (config != null) {
             return new ResolvedConfig(config.transport(), resolveAdminUri(config.adminUri()),
-                    config.imposters(), config.reset(), config.dumpRecordedOnFailure());
+                    config.imposters(), config.reset(), config.dumpRecordedOnFailure(), config.engineOptions());
         }
         Class<?> testClass = context.getRequiredTestClass();
 
@@ -271,7 +274,7 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
         RiftTest riftTest = AnnotationSupport.findAnnotation(testClass, RiftTest.class)
                 .orElseThrow(() -> new IllegalStateException("@RiftTest not found on " + testClass.getName()));
         return new ResolvedConfig(riftTest.transport(), resolveAdminUri(riftTest.adminUri()),
-                collectSpecFields(testClass), riftTest.reset(), riftTest.dumpRecordedOnFailure());
+                collectSpecFields(testClass), riftTest.reset(), riftTest.dumpRecordedOnFailure(), EngineOptions.NONE);
     }
 
     private static String resolveAdminUri(String adminUri) {
@@ -283,19 +286,28 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
         return adminUri;
     }
 
-    private static Rift buildRift(Transport transport, String resolvedAdminUri) {
+    private static Rift buildRift(Transport transport, String resolvedAdminUri, EngineOptions engineOptions) {
         return switch (transport) {
             case CONNECT -> {
+                if (engineOptions.connect() != null) {
+                    yield Rift.connect(engineOptions.connect());
+                }
                 if (resolvedAdminUri.isBlank()) {
                     throw new IllegalStateException(
-                            "CONNECT transport requires a non-blank adminUri (set it on @RiftTest or the builder)");
+                            "CONNECT transport requires a non-blank adminUri (set it on @RiftTest, the builder, "
+                                    + "or via connectOptions(...))");
                 }
                 yield Rift.connect(URI.create(resolvedAdminUri));
             }
-            case SPAWN -> Rift.spawn();
-            case EMBEDDED -> Rift.embedded();
-            case AUTO -> Rift.isEmbeddedAvailable() ? Rift.embedded() : Rift.spawn();
+            case SPAWN -> engineOptions.spawn() != null ? Rift.spawn(engineOptions.spawn()) : Rift.spawn();
+            case EMBEDDED -> embedded(engineOptions);
+            case AUTO -> Rift.isEmbeddedAvailable() ? embedded(engineOptions)
+                    : (engineOptions.spawn() != null ? Rift.spawn(engineOptions.spawn()) : Rift.spawn());
         };
+    }
+
+    private static Rift embedded(EngineOptions engineOptions) {
+        return engineOptions.embedded() != null ? Rift.embedded(engineOptions.embedded()) : Rift.embedded();
     }
 
     /**
@@ -358,14 +370,23 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
         field.set(testInstance, value);
     }
 
+    /**
+     * The transport-specific options a Tier-2 builder may supply for the engine it constructs; each is
+     * {@code null} unless set. The annotation tier does not use these (it configures the engine via the
+     * {@code rift.ffi.lib} / {@code rift.versionCheck} launch properties), so it always passes {@link #NONE}.
+     */
+    private record EngineOptions(EmbeddedOptions embedded, ConnectOptions connect, SpawnOptions spawn) {
+        static final EngineOptions NONE = new EngineOptions(null, null, null);
+    }
+
     /** Immutable Tier-2 configuration produced by {@link Builder}. */
     private record Config(Transport transport, String adminUri, List<ImposterSpec> imposters,
-                          Reset reset, boolean dumpRecordedOnFailure) {
+                          Reset reset, boolean dumpRecordedOnFailure, EngineOptions engineOptions) {
     }
 
     /** Configuration resolved for a run, from either the builder or the {@code @RiftTest} annotation. */
     private record ResolvedConfig(Transport transport, String adminUri, List<ImposterSpec> imposters,
-                                  Reset reset, boolean dumpRecordedOnFailure) {
+                                  Reset reset, boolean dumpRecordedOnFailure, EngineOptions engineOptions) {
     }
 
     /** Fluent builder for the Tier-2 programmatic {@code @RegisterExtension} path. */
@@ -375,6 +396,9 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
         private final List<ImposterSpec> imposters = new ArrayList<>();
         private Reset reset = Reset.PER_TEST;
         private boolean dumpRecordedOnFailure = false;
+        private EmbeddedOptions embeddedOptions;
+        private ConnectOptions connectOptions;
+        private SpawnOptions spawnOptions;
 
         private Builder() {
         }
@@ -405,9 +429,41 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
             return this;
         }
 
+        /** Options for an {@code EMBEDDED} (or {@code AUTO}-resolves-to-embedded) engine — e.g. a dev library path. */
+        public Builder embeddedOptions(EmbeddedOptions embeddedOptions) {
+            this.embeddedOptions = Objects.requireNonNull(embeddedOptions, "embeddedOptions");
+            return this;
+        }
+
+        /** Options for a {@code CONNECT} engine; carries its own {@code adminUri}. */
+        public Builder connectOptions(ConnectOptions connectOptions) {
+            this.connectOptions = Objects.requireNonNull(connectOptions, "connectOptions");
+            return this;
+        }
+
+        /** Options for a {@code SPAWN} (or {@code AUTO}-falls-back-to-spawn) engine. */
+        public Builder spawnOptions(SpawnOptions spawnOptions) {
+            this.spawnOptions = Objects.requireNonNull(spawnOptions, "spawnOptions");
+            return this;
+        }
+
         public RiftTestExtension build() {
-            return new RiftTestExtension(
-                    new Config(transport, adminUri, List.copyOf(imposters), reset, dumpRecordedOnFailure));
+            // Options must match the selected transport; AUTO may resolve to embedded or spawn (never connect).
+            if (connectOptions != null && transport != Transport.CONNECT) {
+                throw new IllegalStateException(
+                        "connectOptions(...) requires transport(CONNECT), but transport is " + transport);
+            }
+            if (embeddedOptions != null && transport != Transport.EMBEDDED && transport != Transport.AUTO) {
+                throw new IllegalStateException(
+                        "embeddedOptions(...) requires transport(EMBEDDED) or transport(AUTO), but transport is "
+                                + transport);
+            }
+            if (spawnOptions != null && transport != Transport.SPAWN && transport != Transport.AUTO) {
+                throw new IllegalStateException(
+                        "spawnOptions(...) requires transport(SPAWN) or transport(AUTO), but transport is " + transport);
+            }
+            return new RiftTestExtension(new Config(transport, adminUri, List.copyOf(imposters), reset,
+                    dumpRecordedOnFailure, new EngineOptions(embeddedOptions, connectOptions, spawnOptions)));
         }
     }
 }

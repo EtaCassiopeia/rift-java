@@ -170,6 +170,40 @@ class UserClientTest {
 `newInstance()` defaults match the annotation (`Transport.AUTO`, `Reset.PER_TEST`,
 `dumpRecordedOnFailure=false`). `adminUri(...)` also honours the `${property}` placeholder.
 
+## Configuring the engine
+
+There are two ways to configure the engine the extension constructs, matching the two tiers:
+
+**Annotation tier — launch properties.** `@RiftTest` stays deliberately small; point the embedded
+engine at a specific library and relax the version preflight from the launch command (no code
+change), which is exactly what a dev/vendored engine needs:
+
+```
+-Drift.ffi.lib=native/librift_ffi.dylib -Drift.versionCheck=off
+```
+
+(`rift.ffi.lib`/`RIFT_FFI_LIB` set the library path; `rift.versionCheck`/`RIFT_VERSION_CHECK` accept
+`off`/`warn`/`fail`.)
+
+**Builder tier — options objects.** For full programmatic control, hand the builder the options for
+the transport it will use. Each is validated against the selected transport (`AUTO` may resolve to
+embedded or spawn, never connect):
+
+```java
+@RegisterExtension
+static final RiftTestExtension rift = RiftTestExtension.newInstance()
+        .transport(Transport.EMBEDDED)
+        .embeddedOptions(EmbeddedOptions.builder()
+                .libraryPath(Path.of("native/librift_ffi.dylib"))
+                .versionCheck(VersionCheck.OFF)
+                .build())
+        .build();
+// .connectOptions(ConnectOptions.builder(uri)...) for CONNECT (carries its own adminUri)
+// .spawnOptions(SpawnOptions.builder()...)        for SPAWN / AUTO
+```
+
+A mismatched pairing (e.g. `transport(SPAWN)` with `embeddedOptions(...)`) fails fast at `build()`.
+
 ## Failure diagnostics (`dumpRecordedOnFailure`)
 
 `@RiftTest(dumpRecordedOnFailure = true)` (or `.dumpRecordedOnFailure(true)` on the builder)

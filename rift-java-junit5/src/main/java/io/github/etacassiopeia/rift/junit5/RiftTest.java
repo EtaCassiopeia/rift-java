@@ -13,6 +13,12 @@ import java.lang.annotation.Target;
  * Enables the rift-java JUnit 5 test integration on a test class: starts one {@link
  * io.github.etacassiopeia.rift.Rift} engine for the test class and drives the {@link RiftImposter}
  * declarations, injecting {@link InjectRift}/{@link InjectImposter} fields and parameters.
+ *
+ * <p>The annotation intentionally carries no per-transport engine options: configure the engine from
+ * the launch command ({@code -Drift.ffi.lib}, {@code -Drift.versionCheck}), or use the
+ * {@code @RegisterExtension} builder ({@link RiftTestExtension#newInstance()}) with
+ * {@code embeddedOptions(...)} / {@code connectOptions(...)} / {@code spawnOptions(...)} for full
+ * programmatic control.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
