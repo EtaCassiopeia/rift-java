@@ -37,6 +37,13 @@ public interface Intercept extends AutoCloseable {
     /** Adds a rule forwarding requests to {@code host} on to {@code imposter}'s own port. */
     InterceptRule redirectTo(String host, Imposter imposter);
 
+    /**
+     * Begins a predicate-scoped rule with an optional host — the engine's full rule shape (match by
+     * path/method/headers/body like a stub, and/or a catch-all with no host), beyond the host-only
+     * {@link #serve}/{@link #forward}/{@link #redirectTo} above. See {@link InterceptRuleBuilder}.
+     */
+    InterceptRuleBuilder rule();
+
     /** The current intercept rules, in the order they were added. */
     List<InterceptRule> rules();
 

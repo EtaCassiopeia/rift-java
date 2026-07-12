@@ -74,6 +74,41 @@ class InterceptE2eIT {
     }
 
     @Test
+    void predicateScopedRuleMatchesOnlyItsPathThroughTheProxy() throws Exception {
+        try (Rift rift = embedded()) {
+            Intercept intercept = rift.intercept();
+            try {
+                // Serve 418 ONLY for GET /health on example.com; other paths must not match this rule.
+                InterceptRule rule = intercept.rule()
+                        .host("example.com")
+                        .when(RiftDsl.onGet("/health"))
+                        .serve(RiftDsl.status(418));
+                assertEquals(1, rule.predicates().size(), "readback exposes the rule's predicate");
+
+                SSLContext ssl = intercept.trust().sslContext();
+                HttpClient client = HttpClient.newBuilder()
+                        .sslContext(ssl).proxy(intercept.proxySelector())
+                        .connectTimeout(Duration.ofSeconds(10)).build();
+
+                HttpResponse<String> matched = client.send(
+                        HttpRequest.newBuilder(URI.create("https://example.com/health"))
+                                .timeout(Duration.ofSeconds(10)).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(418, matched.statusCode(), "GET /health matched the predicate-scoped serve rule");
+
+                HttpResponse<String> unmatched = client.send(
+                        HttpRequest.newBuilder(URI.create("https://example.com/other"))
+                                .timeout(Duration.ofSeconds(10)).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertTrue(unmatched.statusCode() != 418,
+                        "GET /other must not match the /health predicate, got " + unmatched.statusCode());
+            } finally {
+                intercept.close();
+            }
+        }
+    }
+
+    @Test
     void rulesAreListedByKindAndCleared() {
         try (Rift rift = embedded()) {
             Intercept intercept = rift.intercept();
