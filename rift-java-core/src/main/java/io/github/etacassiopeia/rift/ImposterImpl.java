@@ -74,6 +74,26 @@ final class ImposterImpl implements Imposter {
     }
 
     @Override
+    public StubRef addStub(StubSpec spec, int index) {
+        return addStubAt(JsonValue.parse(spec.build().toJson()), index);
+    }
+
+    @Override
+    public StubRef addStubFirst(StubSpec spec) {
+        return addStub(spec, 0);
+    }
+
+    private StubRef addStubAt(JsonValue stub, int index) {
+        int size = definition().stubs().size();
+        if (index < 0 || index > size) {
+            throw new InvalidDefinition(
+                    "stub index " + index + " out of range for imposter :" + port + " (has " + size + " stubs)");
+        }
+        transport.addStub(port, stub, index);
+        return new StubRefImpl(port, transport, new StubAddress.ByIndex(index));
+    }
+
+    @Override
     public Recording startRecording(String originUrl) {
         return startRecording(originUrl, RecordSpec.builder().build());
     }

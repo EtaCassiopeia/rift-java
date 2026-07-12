@@ -270,6 +270,8 @@ public interface Imposter {
 
   // -- stubs --
   StubRef addStub(StubSpec spec);             // returns index- (and id-, if set) addressed ref
+  StubRef addStub(StubSpec spec, int index);  // insert at position (0 = first, highest priority)
+  StubRef addStubFirst(StubSpec spec);        // sugar for (spec, 0) — the overlay idiom (addStubFirst → ref.delete() reverts)
   StubRef addStub(JsonValue stub);            // escape hatch
   void replaceStubs(List<StubSpec> specs);
   void replaceStubs(ScenarioSpec scenario);   // convenience: scenario → stub list

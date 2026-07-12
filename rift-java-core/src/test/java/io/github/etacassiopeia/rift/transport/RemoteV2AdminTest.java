@@ -85,4 +85,19 @@ class RemoteV2AdminTest {
             }
         }
     }
+
+    @Test
+    void positionalAddStubSendsTheIndexInTheBody() {
+        try (FakeAdminServer s = new FakeAdminServer()) {
+            s.respond("POST /imposters/4545/stubs", 200, "");
+            try (RemoteTransport t = transport(s)) {
+                t.addStub(4545, JsonValue.parse("{\"responses\":[{\"is\":{\"statusCode\":418}}]}"), 2);
+                String body = s.received().stream()
+                        .filter(r -> r.method().equals("POST") && r.path().equals("/imposters/4545/stubs"))
+                        .findFirst().orElseThrow().body();
+                assertTrue(body.contains("\"index\":2") || body.contains("\"index\": 2"), body);
+                assertTrue(body.contains("\"stub\""), "still wraps the stub envelope: " + body);
+            }
+        }
+    }
 }

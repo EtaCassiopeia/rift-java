@@ -26,6 +26,16 @@ public interface Imposter {
 
     StubRef addStub(StubSpec spec);
 
+    /**
+     * Inserts a stub at {@code index} (0 = first, highest match priority — first-match-wins). Since
+     * matching is first-match-wins, {@code index 0} temporarily overrides an existing stub; delete the
+     * returned {@link StubRef} to revert. {@code index} must be in {@code [0, stubCount]}.
+     */
+    StubRef addStub(StubSpec spec, int index);
+
+    /** Inserts a stub at the front (highest priority) — sugar for {@code addStub(spec, 0)}; the overlay idiom. */
+    StubRef addStubFirst(StubSpec spec);
+
     StubRef addStub(JsonValue stub);
 
     /** Starts a proxy recording to {@code originUrl} with the default {@link RecordSpec}. */

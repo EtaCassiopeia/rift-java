@@ -90,6 +90,11 @@ public final class EmbeddedTransport implements RiftTransport {
     }
 
     @Override
+    public void addStub(int port, JsonValue stub, int index) {
+        calls.addStub(port, stub, index);
+    }
+
+    @Override
     public void addStub(int port, JsonValue stub) {
         calls.addStub(port, stub);
     }
