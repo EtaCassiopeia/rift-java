@@ -18,6 +18,17 @@ Thanks for helping build the official Java SDK for [Rift](https://github.com/Eta
 The CI matrix runs `./mvnw -B verify` on **JDK 17, 21, 22** across **Linux, macOS, and Windows**.
 Run the wrapper on your JDK before opening a PR; CI covers the rest of the matrix.
 
+A full source install works with no flags, including behind a restricted network:
+
+```sh
+./mvnw -DskipTests install        # installs every module (incl. rift-java-bom) to ~/.m2
+```
+
+`rift-java-bom`'s `resolve-through-bom` self-validation IT is skipped in a plain build (it needs
+network to resolve the managed modules' transitive deps and would otherwise block the BOM from
+installing). It runs automatically in the release lane (`-Prelease`, i.e. CI's release-smoke and
+deploy); to run it locally, add `-Dinvoker.skip=false`.
+
 ## Module layout
 
 | Module | JDK | Contents |

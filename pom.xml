@@ -46,6 +46,15 @@
     <!-- Pinned Rift engine release the natives + version preflight track (no leading 'v'). -->
     <rift.engine.version>0.13.3</rift.engine.version>
 
+    <!-- rift-java-bom's resolve-through-bom invoker IT is self-validation, not a prerequisite for
+         the BOM artifact. It runs at integration-test (before install) and needs network to resolve
+         the managed modules' transitive deps, so a failure (e.g. a locked-down mirror) would block a
+         plain `mvn install` from ever landing the BOM pom. Skipped by default so a source build works
+         with no flags; the release profile flips it on, so it still runs on every push/PR via
+         release-smoke and at deploy. Run it locally with `-Dinvoker.skip=false`. (Only rift-java-bom
+         uses the invoker plugin, so this property is inert for every other module.) -->
+    <invoker.skip>true</invoker.skip>
+
     <!-- Dependency versions -->
     <junit.version>5.11.4</junit.version>
     <jackson.version>2.18.2</jackson.version>
@@ -167,6 +176,12 @@
     <!-- Signing + sources + javadoc + Central publishing. Enabled explicitly on deploy. -->
     <profile>
       <id>release</id>
+      <properties>
+        <!-- Re-enable the BOM's resolve-through-bom self-validation IT in the release lane
+             (release-smoke on every push/PR, and deploy), where it is skipped by default so a plain
+             source install is never blocked by it. See rift-java-bom/pom.xml. -->
+        <invoker.skip>false</invoker.skip>
+      </properties>
       <build>
         <plugins>
           <plugin>
