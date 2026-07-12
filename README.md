@@ -5,14 +5,14 @@ Mountebank-compatible HTTP/HTTPS mock server written in Rust.
 
 📖 **Documentation site: [etacassiopeia.github.io/rift-java](https://etacassiopeia.github.io/rift-java/)**
 
-> **Status: early access.** The public API is pinned down in
-> [docs/design/sdk-api.md](docs/design/sdk-api.md) (mirrored as
-> [#19](https://github.com/EtaCassiopeia/rift-java/issues/19)); implementation is tracked in
-> the issues of this repo (milestones M1/M2). Development **snapshots** are published to the
-> Central Portal snapshots repository on every commit to `master`; stable releases go to Maven
-> Central on each `vX.Y.Z` tag. See [Installation](#installation) to add it to your build.
+> **Available on Maven Central.** The current release is **0.1.0** under the
+> `io.github.etacassiopeia` group ID. The public API is documented on the
+> [docs site](https://etacassiopeia.github.io/rift-java/) and
+> [docs/design/sdk-api.md](docs/design/sdk-api.md). Stable releases go to Maven Central on each
+> `vX.Y.Z` tag; development **snapshots** publish to the Central Portal snapshots repository on
+> every commit to `master`. See [Installation](#installation) to add it to your build.
 
-## What it will look like
+## What it looks like
 
 ```java
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
@@ -40,7 +40,7 @@ try (Rift rift = Rift.embedded()) {                  // or Rift.connect(uri) / R
 | `rift-java-jackson` | 17+ | optional POJO body codec |
 | `rift-java-spring` | 17+ | Spring Boot test integration: `@EnableRift`, `@ConfigureImposter`, `@InjectImposter`/`@InjectRift`. Spring is `provided`. |
 | `rift-java-testcontainers` | 17+ | `RiftContainer` runs the rift proxy in Docker with the `hostResolver` seam wired for port mapping. See [docs/testcontainers.md](docs/testcontainers.md). |
-| `rift-java-conformance` | 17+ | test-only M1 gate: replays the engine's published conformance corpus over the remote/spawn transport (DSL ↔ engine parity). Not published. See [its README](rift-java-conformance/README.md). |
+| `rift-java-conformance` | 17+ | test-only parity gate: replays the engine's published conformance corpus over the remote/spawn transport (DSL ↔ engine parity). Not published. See [its README](rift-java-conformance/README.md). |
 | `rift-java-bom` | — | one import that version-pins every module + the 6 natives classifiers |
 
 One client, three transports — embedded (in-process, no Docker, OS-assigned ports),
@@ -73,7 +73,7 @@ per-module `<version>`:
     <dependency>
       <groupId>io.github.etacassiopeia</groupId>
       <artifactId>rift-java-bom</artifactId>
-      <version>0.1.0-SNAPSHOT</version> <!-- or a stable X.Y.Z once released -->
+      <version>0.1.0</version> <!-- or X.Y.Z-SNAPSHOT for the latest master -->
       <type>pom</type>
       <scope>import</scope>
     </dependency>
@@ -122,7 +122,7 @@ repositories {
 }
 
 dependencies {
-    testImplementation(platform("io.github.etacassiopeia:rift-java-bom:0.1.0-SNAPSHOT")) // or a stable X.Y.Z
+    testImplementation(platform("io.github.etacassiopeia:rift-java-bom:0.1.0")) // or X.Y.Z-SNAPSHOT for the latest master
     testImplementation("io.github.etacassiopeia:rift-java-core")
     testImplementation("io.github.etacassiopeia:rift-java-junit5")
 }
