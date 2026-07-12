@@ -25,3 +25,6 @@ native-local/
 # flatten-maven-plugin output (natives module)
 .flattened-pom.xml
 **/.flattened-pom.xml
+
+# MkDocs build output
+site/
