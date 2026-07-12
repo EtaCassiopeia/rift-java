@@ -39,6 +39,9 @@ final class FakeRiftAdmin implements AutoCloseable {
     private final HttpServer server;
     private final AtomicInteger nextPort = new AtomicInteger(5000);
     private final Map<Integer, ImposterState> imposters = new ConcurrentHashMap<>();
+    final AtomicInteger interceptStarts = new AtomicInteger();
+    final AtomicInteger interceptRuleAdds = new AtomicInteger();
+    final AtomicInteger interceptRuleClears = new AtomicInteger();
 
     FakeRiftAdmin() {
         try {
@@ -82,6 +85,24 @@ final class FakeRiftAdmin implements AutoCloseable {
     private String route(String method, String path) {
         if (path.equals("/config")) {
             return "{\"version\":\"0.13.1\",\"commit\":\"test\"}";
+        }
+        if (path.equals("/intercept") && method.equals("POST")) {
+            interceptStarts.incrementAndGet();
+            return "{\"interceptPort\":19000,\"interceptUrl\":\"http://127.0.0.1:19000\"}";
+        }
+        if (path.equals("/intercept/rules")) {
+            if (method.equals("POST")) {
+                interceptRuleAdds.incrementAndGet();
+                return "{}";
+            }
+            if (method.equals("DELETE")) {
+                interceptRuleClears.incrementAndGet();
+                return "{}";
+            }
+            return "[]"; // GET
+        }
+        if (path.equals("/intercept/ca.pem")) {
+            return "-----BEGIN CERTIFICATE-----\ndummy\n-----END CERTIFICATE-----";
         }
         if (path.equals("/imposters") && method.equals("POST")) {
             int port = nextPort.getAndIncrement();

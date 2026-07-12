@@ -606,6 +606,10 @@ class UserApiTest {
 
 - `Transport.AUTO` (default): embedded if `Rift.isEmbeddedAvailable()` → spawn if binary
   resolvable → fail with a message naming both fixes.
+- **Intercept**: `@RiftIntercept` (class) starts a listener for the class; `@RiftInterceptRules`
+  (a `static void` method, params `Intercept`/`@InjectRift`/`@InjectImposter`) declares rules, applied
+  on start and re-applied after each per-test rules reset; `@InjectIntercept` injects the live handle.
+  CA (`caCert`/`caKey`) and `exportTruststore` attributes cover the shared-CA / containerized-SUT flows.
 - One `Rift` engine per test class (static) — per-method engine via instance-field
   `@RegisterExtension`.
 - `Reset.PER_TEST`: between tests, recorded requests + scenario states + flow state cleared,

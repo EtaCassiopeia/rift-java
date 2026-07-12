@@ -3,10 +3,13 @@ package io.github.etacassiopeia.rift.junit5;
 import io.github.etacassiopeia.rift.ConnectOptions;
 import io.github.etacassiopeia.rift.EmbeddedOptions;
 import io.github.etacassiopeia.rift.Imposter;
+import io.github.etacassiopeia.rift.Intercept;
+import io.github.etacassiopeia.rift.InterceptOptions;
 import io.github.etacassiopeia.rift.RecordedRequest;
 import io.github.etacassiopeia.rift.Recording;
 import io.github.etacassiopeia.rift.Rift;
 import io.github.etacassiopeia.rift.SpawnOptions;
+import io.github.etacassiopeia.rift.TruststoreFormat;
 import io.github.etacassiopeia.rift.dsl.ImposterSpec;
 import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.ImposterDefinition;
@@ -26,7 +29,9 @@ import org.junit.platform.commons.support.HierarchyTraversalMode;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Parameter;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -86,6 +91,7 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
             RiftTestContext riftTestContext =
                     new RiftTestContext(rift, impostersByName, resolved.reset(), resolved.dumpRecordedOnFailure());
             applyGolden(context.getRequiredTestClass(), impostersByName, riftTestContext);
+            startInterceptIfConfigured(context.getRequiredTestClass(), rift, riftTestContext);
             if (resolved.reset() == Reset.PER_CLASS) {
                 riftTestContext.resetConfiguredImposters();
             }
@@ -165,6 +171,10 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
         RiftTestContext riftTestContext = riftTestContext(context);
         if (riftTestContext.reset() == Reset.PER_TEST) {
             riftTestContext.resetConfiguredImposters();
+            if (riftTestContext.intercept() != null) {
+                riftTestContext.intercept().clearRules();
+                applyInterceptRules(context.getRequiredTestClass(), riftTestContext);
+            }
         }
     }
 
@@ -180,11 +190,17 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
             InjectImposter injectImposter = field.getAnnotation(InjectImposter.class);
             setField(field, testInstance, riftTestContext.imposter(injectImposter.value()));
         }
+        for (Field field : AnnotationSupport.findAnnotatedFields(
+                testInstance.getClass(), InjectIntercept.class, f -> true, HierarchyTraversalMode.TOP_DOWN)) {
+            setField(field, testInstance, requireIntercept(riftTestContext));
+        }
     }
 
     @Override
     public boolean supportsParameter(ParameterContext parameterContext, ExtensionContext extensionContext) {
-        return parameterContext.isAnnotated(InjectRift.class) || parameterContext.isAnnotated(InjectImposter.class);
+        return parameterContext.isAnnotated(InjectRift.class)
+                || parameterContext.isAnnotated(InjectImposter.class)
+                || parameterContext.isAnnotated(InjectIntercept.class);
     }
 
     @Override
@@ -192,6 +208,9 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
         RiftTestContext riftTestContext = riftTestContext(extensionContext);
         if (parameterContext.isAnnotated(InjectRift.class)) {
             return riftTestContext.rift();
+        }
+        if (parameterContext.isAnnotated(InjectIntercept.class)) {
+            return requireIntercept(riftTestContext);
         }
         InjectImposter injectImposter = parameterContext.findAnnotation(InjectImposter.class)
                 .orElseThrow(() -> new ParameterResolutionException("expected @InjectImposter on parameter " + parameterContext.getParameter()));
@@ -368,6 +387,84 @@ public final class RiftTestExtension implements BeforeAllCallback, BeforeEachCal
     private static void setField(Field field, Object testInstance, Object value) throws IllegalAccessException {
         field.trySetAccessible();
         field.set(testInstance, value);
+    }
+
+    // -- @RiftIntercept ---------------------------------------------------------------------------
+
+    private static void startInterceptIfConfigured(Class<?> testClass, Rift rift, RiftTestContext ctx) {
+        RiftIntercept config = AnnotationSupport.findAnnotation(testClass, RiftIntercept.class).orElse(null);
+        if (config == null) {
+            return;
+        }
+        InterceptOptions.Builder options = InterceptOptions.builder().host(config.host()).port(config.port());
+        String caCert = resolvePlaceholder(config.caCert());
+        String caKey = resolvePlaceholder(config.caKey());
+        if (!caCert.isEmpty() || !caKey.isEmpty()) {
+            options.ca(caCert.isEmpty() ? null : Path.of(caCert), caKey.isEmpty() ? null : Path.of(caKey));
+        }
+        Intercept intercept = rift.intercept(options.build());
+        ctx.setIntercept(intercept);
+
+        String export = resolvePlaceholder(config.exportTruststore());
+        if (!export.isEmpty()) {
+            intercept.trust().exportTruststore(config.exportFormat(), config.exportPassword(), Path.of(export));
+        }
+        applyInterceptRules(testClass, ctx);
+    }
+
+    private static void applyInterceptRules(Class<?> testClass, RiftTestContext ctx) {
+        for (Method method : AnnotationSupport.findAnnotatedMethods(
+                testClass, RiftInterceptRules.class, HierarchyTraversalMode.TOP_DOWN)) {
+            if (!Modifier.isStatic(method.getModifiers())) {
+                throw new IllegalStateException("@RiftInterceptRules method " + method + " must be static");
+            }
+            Object[] args = resolveRulesArgs(method, ctx);
+            method.trySetAccessible();
+            try {
+                method.invoke(null, args);
+            } catch (ReflectiveOperationException e) {
+                Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ite ? ite.getCause() : e;
+                throw new IllegalStateException("failed to apply @RiftInterceptRules method " + method.getName()
+                        + ": " + cause.getMessage(), cause);
+            }
+        }
+    }
+
+    private static Object[] resolveRulesArgs(Method method, RiftTestContext ctx) {
+        Parameter[] params = method.getParameters();
+        Object[] args = new Object[params.length];
+        for (int i = 0; i < params.length; i++) {
+            Parameter p = params[i];
+            if (p.getType() == Intercept.class) {
+                args[i] = requireIntercept(ctx);
+            } else if (p.getType() == Rift.class) {
+                args[i] = ctx.rift();
+            } else if (p.isAnnotationPresent(InjectImposter.class)) {
+                args[i] = ctx.imposter(p.getAnnotation(InjectImposter.class).value());
+            } else {
+                throw new IllegalStateException("@RiftInterceptRules parameter " + p
+                        + " is not resolvable (expected Intercept, Rift, or @InjectImposter Imposter)");
+            }
+        }
+        return args;
+    }
+
+    private static Intercept requireIntercept(RiftTestContext ctx) {
+        Intercept intercept = ctx.intercept();
+        if (intercept == null) {
+            throw new ParameterResolutionException(
+                    "@InjectIntercept requires @RiftIntercept on the test class");
+        }
+        return intercept;
+    }
+
+    /** Resolves a {@code ${property}} value against a system property (empty if unset); otherwise verbatim. */
+    private static String resolvePlaceholder(String value) {
+        if (value.startsWith("${") && value.endsWith("}")) {
+            String resolved = System.getProperty(value.substring(2, value.length() - 1));
+            return resolved == null ? "" : resolved;
+        }
+        return value;
     }
 
     /**
