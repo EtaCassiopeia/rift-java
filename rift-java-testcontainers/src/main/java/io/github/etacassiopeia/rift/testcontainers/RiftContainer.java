@@ -1,6 +1,7 @@
 package io.github.etacassiopeia.rift.testcontainers;
 
 import io.github.etacassiopeia.rift.ConnectOptions;
+import io.github.etacassiopeia.rift.InterceptOptions;
 import io.github.etacassiopeia.rift.Rift;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -45,6 +46,7 @@ public final class RiftContainer extends GenericContainer<RiftContainer> {
     private final DockerImageName imageName;
     private Optional<String> apiKey = Optional.empty();
     private boolean gateway = false;
+    private Integer interceptPort;
 
     /** Uses {@code zainalpour/rift-proxy:v}{@link #ENGINE_VERSION}. */
     public RiftContainer() {
@@ -98,6 +100,29 @@ public final class RiftContainer extends GenericContainer<RiftContainer> {
     public RiftContainer withGateway() {
         this.gateway = true;
         return self();
+    }
+
+    /**
+     * Starts the engine's TLS-MITM intercept listener on {@code port} (via {@code RIFT_INTERCEPT_PORT})
+     * and exposes it. Obtain the client-side handle with {@code client().intercept(interceptOptions())}
+     * once the container is running.
+     */
+    public RiftContainer withInterceptPort(int port) {
+        this.interceptPort = port;
+        addExposedPort(port);
+        withEnv("RIFT_INTERCEPT_PORT", String.valueOf(port));
+        return self();
+    }
+
+    /**
+     * Attach options for the intercept listener started by {@link #withInterceptPort(int)}, pointed at
+     * the mapped host:port. Pass to {@code client().intercept(...)}. Valid only once the container is started.
+     */
+    public InterceptOptions interceptOptions() {
+        if (interceptPort == null) {
+            throw new IllegalStateException("no intercept listener configured — call withInterceptPort(...) first");
+        }
+        return InterceptOptions.attach(getHost(), getMappedPort(interceptPort));
     }
 
     /** The mapped admin API URI. Valid only once the container is started. */

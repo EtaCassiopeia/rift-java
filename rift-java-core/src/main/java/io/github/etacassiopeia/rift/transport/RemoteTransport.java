@@ -304,16 +304,13 @@ public final class RemoteTransport implements RiftTransport {
     // Intercept (TLS-MITM)
     // ------------------------------------------------------------------
     //
-    // UNCERTAIN ROUTE: the rift engine's admin API (crates/rift-http-proxy/src/admin_api/
-    // handlers/intercept.rs + router.rs) only ever *manages* an intercept listener that was
-    // already started at process launch via the `--intercept-port` CLI flag — there is no admin
-    // route to start one remotely (route_request only dispatches to intercept::route when an
-    // Option<Arc<InterceptState>> is already Some, and that Some only ever comes from the CLI
-    // wiring in server.rs). "POST /intercept" below is therefore a best guess at what such a
-    // route would look like if/when the engine grows one, mirroring the {interceptPort,
-    // interceptUrl} shape rift_start_intercept already returns over FFI; against today's engine
-    // it 404s, surfaced as an ordinary EngineError. The other four routes are confirmed directly
-    // from intercept.rs's route() match: POST/GET/DELETE /intercept/rules, GET /intercept/ca.pem.
+    // Since rift 0.13.3 (epic #394 / runtime lifecycle #493) the admin API's InterceptControl slot is
+    // always present, so POST /intercept starts a listener at runtime on any server — not only one
+    // launched with --intercept-port — and returns the same {interceptPort, interceptUrl} shape
+    // rift_start_intercept does over FFI. The confirmed management routes are GET/POST/DELETE
+    // /intercept/rules and GET /intercept/ca.pem. To bind to a listener the engine already started at
+    // launch (e.g. a RiftContainer with --intercept-port on a fixed exposed port) instead of starting
+    // a new one, use InterceptOptions.attach(host, port) — RiftImpl.intercept then probes rather than starts.
 
     @Override
     public JsonValue startIntercept(JsonValue options) {

@@ -15,6 +15,29 @@ same `Rift` (or a different `Rift` bound to the same engine) throws `IllegalStat
 call that fails to start (e.g. a bad committed CA — see below) leaves intercept available to
 retry; it does not poison the engine.
 
+Works on every transport: embedded starts the listener over FFM, and a connected/spawned engine
+starts it over the admin API (rift ≥ 0.13.3). The bind `host` must be an **IP literal** (e.g.
+`127.0.0.1` or `0.0.0.0`) — a hostname is rejected client-side.
+
+### Attaching to a listener started at engine launch
+
+When the engine already started a listener at launch — via `--intercept-port` /
+`RIFT_INTERCEPT_PORT`, e.g. a containerized engine with a fixed, exposed port — **attach** to it
+instead of starting a new one:
+
+```java
+Intercept intercept = rift.intercept(InterceptOptions.attach(host, port));
+```
+
+`attach` binds to that endpoint (probing it, not starting), so `host`/`port` are the reachable
+address — a mapped Docker port, say. With `rift-java-testcontainers` this is one call:
+
+```java
+RiftContainer rift = new RiftContainer().withInterceptPort(8888);   // engine launches the listener
+// … after start …
+Intercept intercept = rift.client().intercept(rift.interceptOptions());   // attach to the mapped port
+```
+
 ## Rules: what happens to an intercepted host
 
 Every rule is scoped to one hostname and decides what happens to requests the client sends to

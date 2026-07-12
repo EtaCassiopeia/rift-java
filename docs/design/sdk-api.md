@@ -554,9 +554,12 @@ public final class InterceptOptions {                // builder
 }
 ```
 
-Remote transport maps to `/intercept/*` admin endpoints; embedded maps to
-`rift_start_intercept` / `rift_intercept_*`. Target ergonomics: the rift-java-demo ~30-line
-hand-rolled flow becomes ~8 lines (issue #12's stated goal).
+Remote transport maps to `/intercept/*` admin endpoints (rift ≥ 0.13.3 `POST /intercept` starts a
+listener at runtime, #493); embedded maps to `rift_start_intercept` / `rift_intercept_*`.
+`InterceptOptions.attach(host, port)` binds to a listener the engine started at launch
+(`--intercept-port` / `RIFT_INTERCEPT_PORT`) instead of starting one — used by
+`RiftContainer.withInterceptPort(...)` + `interceptOptions()`. Bind host must be an IP literal.
+Target ergonomics: the rift-java-demo ~30-line hand-rolled flow becomes ~8 lines (issue #12's goal).
 
 ## 10. Body codec SPI (`rift-java-jackson` becomes real)
 

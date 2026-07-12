@@ -55,6 +55,32 @@ static RiftContainer rift = new RiftContainer().withGateway();
 `withApiKey(key)` sets the engine's `MB_APIKEY` (so the admin control plane requires it) and makes
 `client()` authenticate with the same key. The gateway data plane is not gated by the key.
 
+## TLS-MITM intercept
+
+`withInterceptPort(port)` starts the engine's intercept listener at launch (via `RIFT_INTERCEPT_PORT`)
+and exposes the port; attach the client to the mapped endpoint with `interceptOptions()`:
+
+```java
+@Container
+static final RiftContainer rift = new RiftContainer().withInterceptPort(8888);
+
+@Test
+void mocksAnHttpsDependency() throws Exception {
+    try (Rift client = rift.client()) {
+        Intercept intercept = client.intercept(rift.interceptOptions());   // attach to the mapped port
+        intercept.serve("api.partner.com", okJson("{\"ok\":true}"));
+
+        HttpClient http = HttpClient.newBuilder()
+                .sslContext(intercept.trust().sslContext())      // trust the container's CA
+                .proxy(intercept.proxySelector())
+                .build();
+        // point the SUT (or this client) at https://api.partner.com/… — served by rift
+    }
+}
+```
+
+See [docs/intercept.md](intercept.md) for rules, trust material, and shared-CA setups.
+
 ## Using it with the Spring module
 
 Publish the container's admin URI as a property and point `@EnableRift(transport = CONNECT)` at it:

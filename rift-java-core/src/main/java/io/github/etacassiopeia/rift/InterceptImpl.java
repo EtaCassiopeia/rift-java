@@ -45,6 +45,13 @@ final class InterceptImpl implements Intercept {
         this.address = new InetSocketAddress(uri.getHost(), port.asInt());
     }
 
+    /** Attach mode: bind to a listener already started at engine launch, at the given endpoint. */
+    InterceptImpl(RiftTransport transport, String host, int port) {
+        this.transport = transport;
+        this.uri = URI.create("http://" + host + ":" + port);
+        this.address = new InetSocketAddress(host, port);
+    }
+
     @Override
     public InetSocketAddress address() {
         return address;

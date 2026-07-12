@@ -1,5 +1,10 @@
 package io.github.etacassiopeia.rift.transport;
 
+import io.github.etacassiopeia.rift.ConnectOptions;
+import io.github.etacassiopeia.rift.Intercept;
+import io.github.etacassiopeia.rift.InterceptOptions;
+import io.github.etacassiopeia.rift.Rift;
+import io.github.etacassiopeia.rift.VersionCheck;
 import io.github.etacassiopeia.rift.json.JsonValue;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -8,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** {@link RemoteTransport} maps the intercept operations onto the admin API's {@code /intercept/*} routes. */
@@ -39,8 +45,23 @@ class RemoteInterceptTest {
 
     @Test
     void startInterceptPostsToIntercept() {
+        // rift >= 0.13.3 grew a real POST /intercept start route (#493); the transport uses it.
         transport.startIntercept(JsonValue.parse("{\"port\":0}"));
         assertTrue(sawRequest("POST", "/intercept"));
+    }
+
+    @Test
+    void attachProbesTheListenerAndBindsToTheEndpoint() {
+        try (Rift rift = Rift.connect(
+                ConnectOptions.builder(server.baseUri()).versionCheck(VersionCheck.OFF).build())) {
+            Intercept intercept = rift.intercept(InterceptOptions.attach("127.0.0.1", 9443));
+            // Attach probes the existing listener (GET /intercept/rules), never POST /intercept.
+            assertTrue(sawRequest("GET", "/intercept/rules"), "attach probes the running listener");
+            assertTrue(server.received().stream().noneMatch(r -> r.path().equals("/intercept")),
+                    "attach must not attempt to start a listener");
+            assertEquals(9443, intercept.address().getPort());
+            assertEquals("127.0.0.1", intercept.address().getHostString());
+        }
     }
 
     @Test
