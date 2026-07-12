@@ -258,3 +258,50 @@ Commit the golden file. The persisted format is the engine's replayable imposter
 across the rift SDKs and loadable by `rift --configfile`. `@RiftGolden` targets the sole
 `@RiftImposter` on the class, or the one named by `@RiftGolden(imposter = "...")` when there is more
 than one. It builds on the core [`Recording` API](recording.md).
+
+## Intercept (`@RiftIntercept`)
+
+`@RiftIntercept` starts a TLS-MITM intercept listener for the test class. The listener and its CA
+live for the class; only its rules reset per test (per the `@RiftTest` `Reset` policy). Declare rules
+with a `@RiftInterceptRules` static method and get the live handle with `@InjectIntercept`:
+
+```java
+@RiftTest(transport = Transport.EMBEDDED)
+@RiftIntercept(port = 18888, caCert = "certs/ca.pem", caKey = "certs/ca-key.pem",
+               exportTruststore = "target/rift-truststore.jks", exportFormat = TruststoreFormat.JKS)
+class FeatureFlagTest {
+
+    @RiftImposter static ImposterSpec partner = imposter("partner").record()
+            .stub(onGet("/api/quote").willReturn(okJson("{\"px\":1}")));
+
+    @RiftInterceptRules
+    static void rules(Intercept intercept, @InjectImposter("partner") Imposter partner) {
+        intercept.serve("cdn.optimizely.com", okJson(DATAFILE));
+        intercept.redirectTo("api.partner.com", partner);
+    }
+
+    @InjectIntercept Intercept intercept;
+
+    @Test
+    void resolvesFlag() {
+        HttpClient sut = HttpClient.newBuilder()
+                .sslContext(intercept.trust().sslContext())   // or sslContextWithSystemCAs()
+                .proxy(intercept.proxySelector())
+                .build();
+        // … drive the SUT; its intercepted HTTPS calls are served by the rules above …
+    }
+}
+```
+
+- `@RiftIntercept` attributes: `port`/`host` (bind; host is an IP literal), `caCert`/`caKey` (committed
+  CA, else ephemeral; `${property}` placeholders resolved), and `exportTruststore`/`exportFormat`/
+  `exportPassword` (written during `beforeAll`, for a containerized SUT to mount — see
+  [docs/intercept.md](intercept.md#sharing-one-ca-with-a-containerized-sut)).
+- `@RiftInterceptRules` — a `static void` method invoked once the listener starts and re-invoked after
+  each per-test rules reset. Its parameters resolve like test parameters: `Intercept`, `@InjectRift
+  Rift`, `@InjectImposter Imposter`.
+- `@InjectIntercept` — injects the live `Intercept` into a field or test parameter. Present without
+  `@RiftIntercept` on the class → a clear resolution error.
+
+The listener and CA are stable across a class's tests, so trust material handed to a SUT in one test
+stays valid in the next; only the rules reset.

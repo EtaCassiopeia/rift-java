@@ -1,6 +1,7 @@
 package io.github.etacassiopeia.rift.junit5;
 
 import io.github.etacassiopeia.rift.Imposter;
+import io.github.etacassiopeia.rift.Intercept;
 import io.github.etacassiopeia.rift.Recording;
 import io.github.etacassiopeia.rift.Rift;
 
@@ -29,6 +30,9 @@ final class RiftTestContext {
     /** Set only when {@code @RiftGolden} is CAPTURE-ing; {@code afterAll} persists it before closing. */
     private Recording goldenRecording;
     private Path goldenFile;
+
+    /** Set only when {@code @RiftIntercept} is present; {@link #close()} closes it before the engine. */
+    private Intercept intercept;
 
     RiftTestContext(Rift rift, Map<String, Imposter> impostersByName, Reset reset, boolean dumpRecordedOnFailure) {
         this.rift = rift;
@@ -64,6 +68,15 @@ final class RiftTestContext {
         return reset;
     }
 
+    void setIntercept(Intercept intercept) {
+        this.intercept = intercept;
+    }
+
+    /** The live intercept handle, or {@code null} when the class has no {@code @RiftIntercept}. */
+    Intercept intercept() {
+        return intercept;
+    }
+
     /** Resets every configured imposter: clears recorded requests, scenario state, and proxy responses. */
     void resetConfiguredImposters() {
         for (Map.Entry<String, Imposter> entry : impostersByName.entrySet()) {
@@ -95,7 +108,13 @@ final class RiftTestContext {
                 persistGolden();
             }
         } finally {
-            rift.close();
+            try {
+                if (intercept != null) {
+                    intercept.close();
+                }
+            } finally {
+                rift.close();
+            }
         }
     }
 
