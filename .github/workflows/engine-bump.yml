@@ -167,19 +167,36 @@ jobs:
 
           git checkout -b "${BRANCH}"
 
+          # <rift.engine.version> is the source of truth, but a few files hard-code the pinned version
+          # as drift-catchers (a testcontainers test asserts the resolved version + proxy image tag; the
+          # conformance README shows the corpus path). Bump all of them together so the auto-PR is
+          # self-consistent and green, instead of leaving those literals stale for a human to fix.
+          RIFT_CONTAINER_TEST="rift-java-testcontainers/src/test/java/io/github/etacassiopeia/rift/testcontainers/RiftContainerTest.java"
+          CONFORMANCE_README="rift-java-conformance/README.md"
+
           # Replace only the value inside <rift.engine.version>...</rift.engine.version>; every
           # other <...version> property in pom.xml is left untouched.
           sed -i "s|<rift.engine.version>${CURRENT}</rift.engine.version>|<rift.engine.version>${LATEST}</rift.engine.version>|" pom.xml
+          # The ENGINE_VERSION assertion and the proxy image tag (anchored so unrelated strings can't match).
+          sed -i "s|assertEquals(\"${CURRENT}\", RiftContainer.ENGINE_VERSION|assertEquals(\"${LATEST}\", RiftContainer.ENGINE_VERSION|" "${RIFT_CONTAINER_TEST}"
+          sed -i "s|zainalpour/rift-proxy:v${CURRENT}|zainalpour/rift-proxy:v${LATEST}|g" "${RIFT_CONTAINER_TEST}"
+          # The version-locked conformance corpus path (all occurrences).
+          sed -i "s|sdk-conformance-v${CURRENT}|sdk-conformance-v${LATEST}|g" "${CONFORMANCE_README}"
 
-          if ! grep -q "<rift.engine.version>${LATEST}</rift.engine.version>" pom.xml; then
-            echo "Failed to bump <rift.engine.version> in pom.xml — refusing to commit."
+          # Fail loudly if any target still carries the old version (a rename/format drift would otherwise
+          # ship a half-bumped, red PR).
+          if grep -q "<rift.engine.version>${CURRENT}</rift.engine.version>" pom.xml \
+             || grep -q "\"${CURRENT}\", RiftContainer.ENGINE_VERSION" "${RIFT_CONTAINER_TEST}" \
+             || grep -q "rift-proxy:v${CURRENT}" "${RIFT_CONTAINER_TEST}" \
+             || grep -q "sdk-conformance-v${CURRENT}" "${CONFORMANCE_README}"; then
+            echo "Failed to fully bump ${CURRENT} -> ${LATEST}; some version-tracking literal was not updated."
             exit 1
           fi
 
-          git add pom.xml
+          git add pom.xml "${RIFT_CONTAINER_TEST}" "${CONFORMANCE_README}"
           git commit \
             -m "chore(deps): bump rift engine to ${LATEST}" \
-            -m "Pinned rift engine version tracked by <rift.engine.version> in pom.xml, the natives fetch, the embedded spawn default, and the version preflight."
+            -m "Bumps <rift.engine.version> in pom.xml (the source of truth for the natives fetch, embedded spawn default, and version preflight) plus the version-tracking literals in RiftContainerTest and the conformance README, so the PR is self-consistent."
 
           PR_TITLE="chore(deps): bump rift engine to ${LATEST}"
 
