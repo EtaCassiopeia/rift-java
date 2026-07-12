@@ -66,6 +66,39 @@ class InterceptTrustTest {
         assertTrue(containsTestCa(ks, "PKCS12", "changeit"), "null password → \"changeit\"");
     }
 
+    @Test
+    void sslContextWithSystemCAsIsInitialized() throws Exception {
+        SSLContext ctx = new InterceptTrustImpl(caPem).sslContextWithSystemCAs();
+        assertNotNull(ctx);
+        assertNotNull(ctx.getSocketFactory(), "an initialized SSLContext");
+    }
+
+    @Test
+    void exportWithSystemCAsContainsTheCaPlusTheSystemAnchors(@TempDir Path dir) throws Exception {
+        Path caOnly = dir.resolve("ca-only.p12");
+        Path withSystem = dir.resolve("with-system.p12");
+        InterceptTrustImpl trust = new InterceptTrustImpl(caPem);
+        trust.exportTruststore(TruststoreFormat.PKCS12, "changeit", caOnly);
+        trust.exportTruststoreWithSystemCAs(TruststoreFormat.PKCS12, "changeit", withSystem);
+
+        // The intercept CA is present in both...
+        assertTrue(containsTestCa(withSystem, "PKCS12", "changeit"), "intercept CA must be present");
+        // ...and the with-system store additionally carries the JVM default anchors (many more entries).
+        int caOnlyCount = certCount(caOnly, "PKCS12", "changeit");
+        int withSystemCount = certCount(withSystem, "PKCS12", "changeit");
+        assertEquals(1, caOnlyCount, "CA-only store holds exactly the intercept CA");
+        assertTrue(withSystemCount > caOnlyCount + 1,
+                "with-system store must fold in the JVM trust anchors, got " + withSystemCount);
+    }
+
+    private static int certCount(Path store, String type, String password) throws Exception {
+        KeyStore ks = KeyStore.getInstance(type);
+        try (InputStream in = Files.newInputStream(store)) {
+            ks.load(in, password.toCharArray());
+        }
+        return ks.size();
+    }
+
     private static boolean containsTestCa(Path store, String type, String password) throws Exception {
         KeyStore ks = KeyStore.getInstance(type);
         try (InputStream in = Files.newInputStream(store)) {

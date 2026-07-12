@@ -532,8 +532,10 @@ public interface Intercept extends AutoCloseable {
 
 public interface InterceptTrust {
   String caPem();
-  SSLContext sslContext();                           // in-memory truststore with the CA
-  void exportTruststore(TruststoreFormat format, String password, Path out);  // PKCS12 | JKS
+  SSLContext sslContext();                           // in-memory truststore with the CA (hermetic SUT)
+  SSLContext sslContextWithSystemCAs();              // CA + JVM default anchors (SUT also calls real HTTPS)
+  void exportTruststore(TruststoreFormat format, String password, Path out);               // PKCS12 | JKS
+  void exportTruststoreWithSystemCAs(TruststoreFormat format, String password, Path out);  // + system anchors
 }
 
 public final class InterceptOptions {                // builder
