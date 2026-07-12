@@ -61,7 +61,7 @@ public final class ConnectOptions {
         private final URI adminUri;
         private Optional<String> apiKey = Optional.empty();
         private Duration requestTimeout = Duration.ofSeconds(30);
-        private VersionCheck versionCheck = VersionCheck.FAIL;
+        private VersionCheck versionCheck = VersionCheck.resolveDefault();
         private IntFunction<URI> hostResolver;
 
         private Builder(URI adminUri) {
