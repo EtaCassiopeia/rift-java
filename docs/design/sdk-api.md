@@ -547,8 +547,10 @@ public interface InterceptTrust {
 }
 
 public final class InterceptOptions {                // builder
-  // port (0 = OS-assigned), host, caCertPath + caKeyPath (both-or-neither → committed CA;
-  // absent → ephemeral CA)
+  // port (0 = OS-assigned), host; committed CA (both-or-neither, else ephemeral) supplied as:
+  //   ca(Path cert, Path key) | ca(String cert, String key) | ca(byte[] cert, byte[] key) | ca(KeyStore, char[])
+  // in-memory forms materialize to a private temp file the engine loads (embedded; remote needs it
+  // on the engine's fs — containerized byte-shipping is engine-gated)
 }
 ```
 
