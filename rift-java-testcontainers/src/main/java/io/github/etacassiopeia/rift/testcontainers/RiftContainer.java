@@ -3,17 +3,14 @@ package io.github.etacassiopeia.rift.testcontainers;
 import io.github.etacassiopeia.rift.ConnectOptions;
 import io.github.etacassiopeia.rift.InterceptOptions;
 import io.github.etacassiopeia.rift.Rift;
+import io.github.etacassiopeia.rift.RiftVersion;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.net.URI;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Properties;
 
 /**
  * A Testcontainers container for the {@code rift-proxy} engine, for teams that run their mocks in
@@ -37,8 +34,8 @@ import java.util.Properties;
  */
 public final class RiftContainer extends GenericContainer<RiftContainer> {
 
-    /** The pinned rift engine version, single-sourced from the {@code <rift.engine.version>} property. */
-    public static final String ENGINE_VERSION = loadEngineVersion();
+    /** The pinned rift engine version, single-sourced from core's {@code <rift.engine.version>} resource. */
+    public static final String ENGINE_VERSION = RiftVersion.engineVersion();
 
     private static final String IMAGE = "zainalpour/rift-proxy";
     private static final int ADMIN_PORT = 2525;
@@ -146,20 +143,4 @@ public final class RiftContainer extends GenericContainer<RiftContainer> {
         return Rift.connect(options.build());
     }
 
-    private static String loadEngineVersion() {
-        try (InputStream in = RiftContainer.class.getResourceAsStream("/rift-container.properties")) {
-            if (in == null) {
-                throw new IllegalStateException("rift-container.properties missing from the classpath");
-            }
-            Properties props = new Properties();
-            props.load(in);
-            String version = props.getProperty("engine.version");
-            if (version == null || version.isBlank() || version.startsWith("${")) {
-                throw new IllegalStateException("engine.version was not filtered at build time: " + version);
-            }
-            return version;
-        } catch (IOException e) {
-            throw new UncheckedIOException("failed to read rift-container.properties", e);
-        }
-    }
 }
