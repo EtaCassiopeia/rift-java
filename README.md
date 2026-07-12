@@ -3,10 +3,12 @@
 Official Java SDK for [Rift](https://github.com/EtaCassiopeia/rift) — a high-performance,
 Mountebank-compatible HTTP/HTTPS mock server written in Rust.
 
-> **Status: design phase.** The public API is pinned down in
+> **Status: early access.** The public API is pinned down in
 > [docs/design/sdk-api.md](docs/design/sdk-api.md) (mirrored as
 > [#19](https://github.com/EtaCassiopeia/rift-java/issues/19)); implementation is tracked in
-> the issues of this repo (milestones M1/M2). No artifacts are published yet.
+> the issues of this repo (milestones M1/M2). Development **snapshots** are published to the
+> Central Portal snapshots repository on every commit to `master`; stable releases go to Maven
+> Central on each `vX.Y.Z` tag. See [Installation](#installation) to add it to your build.
 
 ## What it will look like
 
@@ -44,6 +46,91 @@ connect (any running Rift admin endpoint), spawn (managed `rift` binary). Full f
 surface on each: stubs/predicates/responses, response cycling, behaviors, proxy
 record/playback, fault injection, stateful scenarios, spaces/flow-state, request
 verification, and TLS-MITM intercept with truststore/`SSLContext` helpers.
+
+## Installation
+
+rift-java is published under the `io.github.etacassiopeia` group ID, on two channels:
+
+| Channel | Repository | Version form | Use for |
+|---|---|---|---|
+| **Stable release** | Maven Central — the default, no config needed | `X.Y.Z` (e.g. `0.1.0`) | CI / regular test suites |
+| **Snapshot** | [Central Portal snapshots](https://central.sonatype.com/repository/maven-snapshots/) — must be added | `X.Y.Z-SNAPSHOT` (e.g. `0.1.0-SNAPSHOT`) | trying the latest `master` |
+
+The recommended entry point is the **BOM** (`rift-java-bom`): import it once and every module is
+version-pinned, so you never repeat a version. See the [BOM README](rift-java-bom/README.md) for the
+full module list and the natives-classifier setup that the embedded module needs.
+
+### Maven
+
+Import the BOM in `<dependencyManagement>`, then declare the modules you need with **no**
+per-module `<version>`:
+
+```xml
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>io.github.etacassiopeia</groupId>
+      <artifactId>rift-java-bom</artifactId>
+      <version>0.1.0-SNAPSHOT</version> <!-- or a stable X.Y.Z once released -->
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
+<dependencies>
+  <dependency>
+    <groupId>io.github.etacassiopeia</groupId>
+    <artifactId>rift-java-core</artifactId>
+    <scope>test</scope>
+  </dependency>
+  <dependency>
+    <groupId>io.github.etacassiopeia</groupId>
+    <artifactId>rift-java-junit5</artifactId>
+    <scope>test</scope>
+  </dependency>
+</dependencies>
+```
+
+Stable releases resolve from Maven Central with no extra configuration. **Snapshots require adding
+the Central Portal snapshots repository** — put this in your `pom.xml`, or in `~/.m2/settings.xml`
+to share it across projects:
+
+```xml
+<repositories>
+  <repository>
+    <id>central-portal-snapshots</id>
+    <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+    <releases><enabled>false</enabled></releases>
+    <snapshots><enabled>true</enabled></snapshots>
+  </repository>
+</repositories>
+```
+
+### Gradle (Kotlin DSL)
+
+```kotlin
+repositories {
+    mavenCentral()
+    // Snapshots only — omit this block if you depend on a stable release:
+    maven {
+        url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+        mavenContent { snapshotsOnly() }
+    }
+}
+
+dependencies {
+    testImplementation(platform("io.github.etacassiopeia:rift-java-bom:0.1.0-SNAPSHOT")) // or a stable X.Y.Z
+    testImplementation("io.github.etacassiopeia:rift-java-core")
+    testImplementation("io.github.etacassiopeia:rift-java-junit5")
+}
+```
+
+> **Using the embedded engine?** `rift-java-embedded` additionally needs a `rift-java-natives`
+> classifier jar for your platform and the JVM flag `--enable-native-access=ALL-UNNAMED` (on JDK 21,
+> use `rift-java-embedded-jdk21`, which also requires `--enable-preview`). The
+> [BOM README](rift-java-bom/README.md#picking-a-natives-classifier-automatically-os-maven-plugin)
+> shows how to select the right classifier automatically.
 
 ## Quick starts
 

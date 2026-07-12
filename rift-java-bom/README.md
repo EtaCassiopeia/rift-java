@@ -45,6 +45,11 @@ If the BOM doesn't manage a module's version, Maven fails the build with
 [`src/it/resolve-through-bom`](src/it/resolve-through-bom), a `maven-invoker-plugin` integration
 test that resolves the whole set through the BOM alone.
 
+> The `-SNAPSHOT` version above resolves only if you have added the Central Portal snapshots
+> repository (`https://central.sonatype.com/repository/maven-snapshots/`); stable `X.Y.Z` versions
+> come from Maven Central with no extra configuration. The repository snippet (Maven and Gradle) is
+> in the root README's [Installation](../README.md#installation) section.
+
 ## Picking a natives classifier automatically: os-maven-plugin
 
 `rift-java-natives` publishes one classifier jar per platform. To let the build pick the right
