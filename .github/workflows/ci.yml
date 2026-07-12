@@ -69,7 +69,9 @@ jobs:
           java-version: '21'
           cache: maven
       - name: Package with the release profile (no signing, no deploy)
-        run: ./mvnw -B -ntp -Prelease -DskipTests -Dgpg.skip=true package
+        # Include natives-bundle so a broken natives assembly (fetch, sha256, classifier jar wiring,
+        # or a manifest/platform drift) is caught on every push/PR, not at the next real deploy.
+        run: ./mvnw -B -ntp -Prelease,natives-bundle -DskipTests -Dgpg.skip=true package
 
   # The Docker-enabled lane for rift-java-testcontainers: RIFT_IT=1 un-gates the RiftContainer
   # round-trip ITs (they self-skip everywhere else). ubuntu-latest runners ship a Docker daemon.
