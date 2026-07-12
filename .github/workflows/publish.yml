@@ -88,3 +88,50 @@ jobs:
             *)   flags="$flags --latest" ;;
           esac
           gh release create "${GITHUB_REF_NAME}" $flags
+
+  # After a release tag deploys, advance master's -SNAPSHOT so snapshot builds no longer collide with
+  # (or trail) the version just released — the maven equivalent of what sbt-dynver derives for free.
+  # The GITHUB_TOKEN push does NOT re-trigger this workflow (GitHub suppresses that), so there is no loop.
+  bump-snapshot:
+    name: Advance the development version
+    needs: publish
+    # Only on a FINAL release tag; a pre-release (v1.2.0-RC1) must not push the dev line past 1.2.0.
+    if: github.repository == 'EtaCassiopeia/rift-java' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Bump master to the next -SNAPSHOT
+        run: |
+          set -euo pipefail
+          RELEASED="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r MAJ MIN PAT <<< "$RELEASED"
+          NEXT="${MAJ}.${MIN}.$((PAT + 1))-SNAPSHOT"
+          CURRENT="$(./mvnw -q -N help:evaluate -Dexpression=project.version -DforceStdout)"
+          echo "released=$RELEASED current=$CURRENT next=$NEXT"
+
+          # Only advance if NEXT is strictly newer than master's current version, so a manual bump or a
+          # workflow re-run on an older tag is never clobbered or reverted (no backward move, no empty commit).
+          newest="$(printf '%s\n%s\n' "$CURRENT" "$NEXT" | sort -V | tail -1)"
+          if [ "$newest" = "$CURRENT" ]; then
+            echo "master is already at $CURRENT (>= $NEXT); nothing to bump."
+            exit 0
+          fi
+
+          ./mvnw -B -ntp versions:set -DnewVersion="$NEXT" -DprocessAllModules -DgenerateBackupPoms=false
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): set development version to $NEXT"
+          git push origin HEAD:master
