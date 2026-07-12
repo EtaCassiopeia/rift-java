@@ -10,6 +10,8 @@ import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Raw FFM binding to the rift C-ABI v2 ({@code librift_ffi}). One downcall handle per symbol. */
 final class RiftFfi {
@@ -143,20 +145,46 @@ final class RiftFfi {
     }
 
     /**
-     * Binds every C-ABI v2 symbol against {@code lookup}. Probes {@code rift_build_info} first so a
-     * pre-v2 (or unrelated) library fails fast with a precise message rather than a linkage failure
-     * deep inside a later call.
+     * Every C-ABI v2 symbol {@link #bind} requires. Kept in sync with the constructor's downcalls; a
+     * real-library bind test transitively verifies the constructor binds each of these.
      */
+    private static final List<String> REQUIRED_SYMBOLS = List.of(
+            "rift_start", "rift_stop", "rift_create_imposter", "rift_replace_stubs", "rift_delete_imposter",
+            "rift_delete_all", "rift_recorded", "rift_stub_warnings", "rift_verify", "rift_list_imposters",
+            "rift_get_imposter", "rift_add_stub", "rift_get_stub", "rift_update_stub", "rift_delete_stub",
+            "rift_clear_recorded", "rift_clear_proxy_recordings", "rift_set_imposter_enabled", "rift_scenarios",
+            "rift_set_scenario_state", "rift_reset_scenarios", "rift_apply_config", "rift_flow_state_get",
+            "rift_flow_state_put", "rift_flow_state_delete", "rift_space_add_stub", "rift_space_list_stubs",
+            "rift_space_delete", "rift_space_recorded", "rift_serve_admin", "rift_build_info", "rift_last_error",
+            "rift_free", "rift_start_intercept", "rift_intercept_add_rules", "rift_intercept_clear_rules",
+            "rift_intercept_list_rules", "rift_intercept_ca_pem", "rift_intercept_export_truststore");
+
     static RiftFfi bind(SymbolLookup lookup, Linker linker) {
-        if (lookup.find("rift_build_info").isEmpty()) {
-            throw new EngineUnavailable(
-                    "rift-java-embedded requires rift >= 0.13.1 (C-ABI v2): the loaded native library is missing rift_build_info");
+        return bind(lookup, linker, "the loaded native library");
+    }
+
+    /**
+     * Binds every C-ABI v2 symbol against {@code lookup}. Probes the full required set first and, if
+     * any are absent, fails with a single message naming <em>all</em> of them (and {@code source}) —
+     * so an incompatible library is diagnosed in one shot rather than one symbol per rebuild.
+     */
+    static RiftFfi bind(SymbolLookup lookup, Linker linker, String source) {
+        List<String> missing = new ArrayList<>();
+        for (String name : REQUIRED_SYMBOLS) {
+            if (lookup.find(name).isEmpty()) {
+                missing.add(name);
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw new EngineUnavailable("rift-java-embedded requires rift >= 0.13.1 (C-ABI v2), but " + source
+                    + " is missing " + missing.size() + " of " + REQUIRED_SYMBOLS.size()
+                    + " required symbols: " + String.join(", ", missing) + ". Update or rebuild the engine.");
         }
         return new RiftFfi(lookup, linker);
     }
 
     static RiftFfi load(Path lib, Arena libArena) {
-        return bind(SymbolLookup.libraryLookup(lib, libArena), Linker.nativeLinker());
+        return bind(SymbolLookup.libraryLookup(lib, libArena), Linker.nativeLinker(), lib.toString());
     }
 
     private static Object invoke(MethodHandle handle, Object... args) {
