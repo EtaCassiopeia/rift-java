@@ -73,7 +73,10 @@ jobs:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
-        run: ./mvnw -B -ntp -Prelease -DskipTests deploy
+        # natives-bundle fetches + jars the six librift_ffi classifier jars the BOM pins, so the
+        # embedded transport is resolvable from Central. GH-Actions egress to the rift release assets
+        # is clean; sha256 is verified against ffi-manifest.json during the fetch.
+        run: ./mvnw -B -ntp -Prelease,natives-bundle -DskipTests deploy
 
       # Publishing to Central only appears under Tags; create the Release object so a pushed tag also
       # shows under Releases. A pre-release tag (contains a hyphen, e.g. v0.1.0-RC1) is not marked Latest.

@@ -199,6 +199,10 @@ public final class NativesFetcher {
             // yields the actionable message rather than a raw trace; the exec profile sets
             // blockSystemExit=true so this exit fails the goal without killing the Maven JVM.
             System.err.println("rift-java-natives: failed to stage native libraries: " + t);
+            System.err.println(
+                    "  Behind a proxy/air gap? Pre-stage the librift_ffi cdylibs (+ ffi-manifest.json) in a "
+                            + "directory and set RIFT_NATIVES_DIR=<dir> to read them locally, or point "
+                            + "RIFT_NATIVES_BASE_URL=<url> at a reachable mirror of the rift release assets.");
             System.exit(1);
         }
     }
