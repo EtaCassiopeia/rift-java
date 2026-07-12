@@ -42,7 +42,7 @@ final class RiftImpl implements Rift {
     static Rift connect(ConnectOptions options) {
         RiftTransport transport = new RemoteTransport(options.adminUri(), options.apiKey(), options.requestTimeout());
         if (options.versionCheck() != VersionCheck.OFF) {
-            preflight(transport, options.versionCheck());
+            preflight(transport, options.versionCheck(), false);
         }
         return new RiftImpl(transport, options, () -> { });
     }
@@ -68,7 +68,7 @@ final class RiftImpl implements Rift {
             // start() already loaded the native library and opened the transport. A version mismatch is
             // a first-class outcome here, so release those native resources before propagating.
             try {
-                preflight(transport, options.versionCheck());
+                preflight(transport, options.versionCheck(), true);
             } catch (RuntimeException e) {
                 try {
                     transport.close();
@@ -90,7 +90,28 @@ final class RiftImpl implements Rift {
         return new RiftImpl(transport, builder.build(), onClose);
     }
 
-    private static void preflight(RiftTransport transport, VersionCheck mode) {
+    /** The outcome of comparing a reported engine version against the floor. Package-private for testing. */
+    enum PreflightDecision { PASS, WARN, FAIL }
+
+    /**
+     * Decides how to react to a reported {@code version} below {@link #MIN_ENGINE_VERSION}. When
+     * {@code abiVerified} (the embedded transport, whose C-ABI symbol set has already been validated
+     * by {@code RiftFfi.bind}), the ABI is authoritative: a below-floor version string is a mislabeled
+     * dev build (the engine workspace ships a {@code 0.1.0} placeholder), so it is demoted to a warning
+     * even in {@code FAIL} mode. A real old engine would have failed the symbol gate first, with a
+     * clearer message. Remote/spawn have no symbol gate, so they keep the strict compare.
+     */
+    static PreflightDecision decide(String version, VersionCheck mode, boolean abiVerified) {
+        if (compareSemver(version, MIN_ENGINE_VERSION) >= 0) {
+            return PreflightDecision.PASS;
+        }
+        if (abiVerified) {
+            return PreflightDecision.WARN;
+        }
+        return mode == VersionCheck.FAIL ? PreflightDecision.FAIL : PreflightDecision.WARN;
+    }
+
+    private static void preflight(RiftTransport transport, VersionCheck mode, boolean abiVerified) {
         String version;
         try {
             // extractVersion is inside the try so a malformed /config body (CommunicationError) is
@@ -103,12 +124,20 @@ final class RiftImpl implements Rift {
             }
             throw e;
         }
-        if (compareSemver(version, MIN_ENGINE_VERSION) < 0) {
-            String message = "rift-java requires rift >= " + MIN_ENGINE_VERSION + ", found " + version;
-            if (mode == VersionCheck.FAIL) {
-                throw new EngineUnavailable(message);
+        switch (decide(version, mode, abiVerified)) {
+            case PASS -> { }
+            case WARN -> {
+                if (abiVerified) {
+                    LOG.log(Level.WARNING, "rift engine reports version " + version + " (below the "
+                            + MIN_ENGINE_VERSION + " floor) but its C-ABI is v2-complete — trusting the ABI "
+                            + "(this is normal for a locally-built engine reporting a placeholder version).");
+                } else {
+                    LOG.log(Level.WARNING, "rift-java requires rift >= " + MIN_ENGINE_VERSION + ", found " + version);
+                }
             }
-            LOG.log(Level.WARNING, message);
+            case FAIL -> throw new EngineUnavailable("rift-java requires rift >= " + MIN_ENGINE_VERSION
+                    + ", found " + version + ". If you know the engine is compatible, relax the check via "
+                    + "EmbeddedOptions/ConnectOptions.versionCheck(WARN|OFF) or -Drift.versionCheck=warn|off.");
         }
     }
 

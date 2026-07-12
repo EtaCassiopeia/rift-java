@@ -136,6 +136,12 @@ dependencies {
 > preflight from the launch command — no code change:
 > `-Drift.ffi.lib=native/librift_ffi.dylib -Drift.versionCheck=off` (`rift.versionCheck` /
 > `RIFT_VERSION_CHECK` accept `off`/`warn`/`fail`; the default is `fail`).
+>
+> Compatibility is checked in two steps: the loaded library must export the full C-ABI v2 symbol set
+> (a too-old library is rejected with **every** missing symbol listed at once), and then the reported
+> version is compared to the floor. Because the symbol set is authoritative for the embedded engine, a
+> locally-built engine that reports a placeholder version (the workspace `0.1.0`) is accepted with a
+> warning rather than failing — its ABI is already proven complete.
 
 ## Quick starts
 
