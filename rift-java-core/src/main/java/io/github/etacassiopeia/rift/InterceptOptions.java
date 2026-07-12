@@ -1,18 +1,13 @@
 package io.github.etacassiopeia.rift;
 
-import io.github.etacassiopeia.rift.json.JsonNull;
+import io.github.etacassiopeia.rift.json.JsonBool;
 import io.github.etacassiopeia.rift.json.JsonNumber;
 import io.github.etacassiopeia.rift.json.JsonObject;
 import io.github.etacassiopeia.rift.json.JsonString;
 import io.github.etacassiopeia.rift.json.JsonValue;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.security.GeneralSecurityException;
 import java.security.Key;
 import java.security.KeyStore;
@@ -20,7 +15,6 @@ import java.security.cert.Certificate;
 import java.util.Base64;
 import java.util.Enumeration;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Options for {@link Rift#intercept(InterceptOptions)}: the bind address for the intercept
@@ -43,13 +37,20 @@ public final class InterceptOptions {
     private final int port;
     private final Path caCertPath;
     private final Path caKeyPath;
+    private final String caCertPem;
+    private final String caKeyPem;
+    private final boolean returnCaKey;
     private final boolean attach;
 
-    private InterceptOptions(String host, int port, Path caCertPath, Path caKeyPath, boolean attach) {
+    private InterceptOptions(String host, int port, Path caCertPath, Path caKeyPath,
+                             String caCertPem, String caKeyPem, boolean returnCaKey, boolean attach) {
         this.host = host;
         this.port = port;
         this.caCertPath = caCertPath;
         this.caKeyPath = caKeyPath;
+        this.caCertPem = caCertPem;
+        this.caKeyPem = caKeyPem;
+        this.returnCaKey = returnCaKey;
         this.attach = attach;
     }
 
@@ -65,7 +66,7 @@ public final class InterceptOptions {
      */
     public static InterceptOptions attach(String host, int port) {
         Objects.requireNonNull(host, "host");
-        return new InterceptOptions(host, port, null, null, true);
+        return new InterceptOptions(host, port, null, null, null, null, false, true);
     }
 
     /** Whether these options attach to an already-running listener rather than starting one. */
@@ -81,14 +82,22 @@ public final class InterceptOptions {
         return port;
     }
 
-    /** The {@code {host,port,caCertPath,caKeyPath}} JSON the engine's {@code rift_start_intercept}/{@code POST /intercept} expects. */
+    /** The intercept start JSON the engine's {@code rift_start_intercept} / {@code POST /intercept} expects. */
     public JsonValue toJson() {
-        return JsonObject.builder()
+        JsonObject.Builder json = JsonObject.builder()
                 .put("host", new JsonString(host))
-                .put("port", JsonNumber.of(port))
-                .put("caCertPath", caCertPath == null ? JsonNull.INSTANCE : new JsonString(caCertPath.toString()))
-                .put("caKeyPath", caKeyPath == null ? JsonNull.INSTANCE : new JsonString(caKeyPath.toString()))
-                .build();
+                .put("port", JsonNumber.of(port));
+        if (caCertPem != null) {
+            // Inline CA (rift >= 0.13.4, rift#593): ship the PEM in the body — no engine-side file.
+            json.put("caCertPem", new JsonString(caCertPem)).put("caKeyPem", new JsonString(caKeyPem));
+        } else if (caCertPath != null) {
+            json.put("caCertPath", new JsonString(caCertPath.toString()))
+                    .put("caKeyPath", new JsonString(caKeyPath.toString()));
+        }
+        if (returnCaKey) {
+            json.put("returnCaKey", JsonBool.TRUE);
+        }
+        return json.build();
     }
 
     public static final class Builder {
@@ -96,6 +105,9 @@ public final class InterceptOptions {
         private int port = 0;
         private Path caCertPath;
         private Path caKeyPath;
+        private String caCertPem;
+        private String caKeyPem;
+        private boolean returnCaKey;
 
         private Builder() {
         }
@@ -129,16 +141,15 @@ public final class InterceptOptions {
             return this;
         }
 
-        /** Loads the intercept CA from in-memory PEM text (both required, or omit both). */
+        /**
+         * Loads the intercept CA from in-memory PEM text (both required, or omit both). The PEM is
+         * shipped inline in the start request (rift &ge; 0.13.4), so it works for a remote engine
+         * without staging a file the engine must read.
+         */
         public Builder ca(String certPem, String keyPem) {
             requireBothOrNeither(certPem, keyPem);
-            if (certPem == null) {
-                this.caCertPath = null;
-                this.caKeyPath = null;
-                return this;
-            }
-            this.caCertPath = writeTemp("rift-intercept-ca-cert", certPem);
-            this.caKeyPath = writeTemp("rift-intercept-ca-key", keyPem);
+            this.caCertPem = certPem;
+            this.caKeyPem = keyPem;
             return this;
         }
 
@@ -159,8 +170,22 @@ public final class InterceptOptions {
             return ca(pem[0], pem[1]);
         }
 
+        /**
+         * Have the engine generate a fresh CA and hand back its cert <em>and</em> key (rift &ge;
+         * 0.13.4, rift#593), retrievable via {@link Intercept#caMaterial()} to persist and redistribute
+         * — instead of pre-making one. Mutually exclusive with a supplied {@code ca(...)}.
+         */
+        public Builder generateCa() {
+            this.returnCaKey = true;
+            return this;
+        }
+
         public InterceptOptions build() {
-            return new InterceptOptions(host, port, caCertPath, caKeyPath, false);
+            if (returnCaKey && (caCertPem != null || caCertPath != null)) {
+                throw new IllegalArgumentException(
+                        "generateCa() cannot be combined with a supplied CA via ca(...)");
+            }
+            return new InterceptOptions(host, port, caCertPath, caKeyPath, caCertPem, caKeyPem, returnCaKey, false);
         }
 
         /** An IPv4 literal (dotted quad, each octet 0-255) or an IPv6 literal (contains a colon). */
@@ -192,23 +217,6 @@ public final class InterceptOptions {
             if ((cert == null) != (key == null)) {
                 throw new IllegalArgumentException(
                         "InterceptOptions.ca(cert, key) requires both a cert and a key, or neither");
-            }
-        }
-
-        private static Path writeTemp(String prefix, String pem) {
-            try {
-                Path file;
-                try {
-                    file = Files.createTempFile(prefix, ".pem", PosixFilePermissions.asFileAttribute(
-                            Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE)));
-                } catch (UnsupportedOperationException nonPosix) {
-                    file = Files.createTempFile(prefix, ".pem"); // Windows etc. — no POSIX perms
-                }
-                file.toFile().deleteOnExit();
-                Files.writeString(file, pem, StandardCharsets.UTF_8);
-                return file;
-            } catch (IOException e) {
-                throw new UncheckedIOException("failed to stage the in-memory intercept CA to a temp file", e);
             }
         }
 
