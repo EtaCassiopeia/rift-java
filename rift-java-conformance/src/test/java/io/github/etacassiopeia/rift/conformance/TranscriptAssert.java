@@ -29,16 +29,6 @@ final class TranscriptAssert {
 
     private static final java.util.Set<String> KNOWN_EXPECT_KEYS = java.util.Set.of("status", "bodyContains", "bodyEquals");
 
-    /**
-     * A short settle between the steps of a multi-step {@code _verify} sequence. Interim workaround for
-     * an engine race (rift#565): the per-imposter response-cycle ({@code repeat}) counter commits after
-     * the response is written, so a zero-latency next request over the in-process embedded transport
-     * can observe stale state and miss a repeat-cycle boundary (503→200) — flaking the ubuntu EMBEDDED
-     * lane. The out-of-process spawn transport and macOS have enough latency to mask it; this restores
-     * the same margin. Single-step sequences have no inter-step state to race, so they never settle.
-     * Tunable via {@code -Drift.conformance.verify.settleMs} pending the engine fix.
-     */
-    private static final long SEQUENCE_SETTLE_MS = Long.getLong("rift.conformance.verify.settleMs", 100L);
 
     private final HttpClient http;
 
@@ -57,10 +47,6 @@ final class TranscriptAssert {
             }
             JsonArray sequence = sequenceOf(verify.get());
             for (int i = 0; i < sequence.items().size(); i++) {
-                // Settle only BETWEEN steps; a single-step (stateless) sequence never reaches i > 0.
-                if (i > 0) {
-                    settleBetweenSteps();
-                }
                 JsonObject step = asObject(sequence.items().get(i));
                 String where = "stub[" + s + "]._verify.sequence[" + i + "]";
                 assertStep(base, step, where);
@@ -121,18 +107,6 @@ final class TranscriptAssert {
                 throw new IllegalStateException(where + ": unsupported _verify expect key '" + key
                         + "' — extend TranscriptAssert to assert it rather than silently skip it.");
             }
-        }
-    }
-
-    private static void settleBetweenSteps() {
-        if (SEQUENCE_SETTLE_MS <= 0) {
-            return;
-        }
-        try {
-            Thread.sleep(SEQUENCE_SETTLE_MS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError("interrupted settling between _verify steps", e);
         }
     }
 
