@@ -1,20 +1,27 @@
 name: Publish
 
+# Releases happen ONLY by pushing a version tag (vX.Y.Z) — mirroring zio-bdd. A push to master
+# publishes the -SNAPSHOT instead, which the central-publishing plugin routes to the Central Portal
+# snapshots repo (https://central.sonatype.com/repository/maven-snapshots/); SNAPSHOT publishing is
+# enabled for the io.github.etacassiopeia namespace in the Portal.
 on:
   push:
     branches: [master]
-  release:
-    types: [published]
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
   publish:
-    name: Deploy to Maven Central
+    name: Publish to Maven Central
     runs-on: ubuntu-latest
     # Only the canonical repo publishes; forks build via CI but never deploy.
     if: github.repository == 'EtaCassiopeia/rift-java'
+    permissions:
+      contents: write # create the GitHub Release object on a tag
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Check publishing credentials
         id: guard
@@ -51,10 +58,33 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
 
-      - name: Deploy
+      # On a tag vX.Y.Z, stamp every module with the release version X.Y.Z so the reactor deploys a
+      # RELEASE (not the -SNAPSHOT). A push to master leaves the -SNAPSHOT version untouched.
+      - name: Set the release version from the tag
+        if: steps.guard.outputs.deploy == 'true' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Releasing $VERSION from tag $GITHUB_REF_NAME"
+          ./mvnw -B -ntp versions:set -DnewVersion="$VERSION" -DprocessAllModules -DgenerateBackupPoms=false
+
+      - name: Deploy to Maven Central
         if: steps.guard.outputs.deploy == 'true'
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
         run: ./mvnw -B -ntp -Prelease -DskipTests deploy
+
+      # Publishing to Central only appears under Tags; create the Release object so a pushed tag also
+      # shows under Releases. A pre-release tag (contains a hyphen, e.g. v0.1.0-RC1) is not marked Latest.
+      - name: Create the GitHub Release for this tag
+        if: steps.guard.outputs.deploy == 'true' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          flags="--verify-tag --generate-notes"
+          case "${GITHUB_REF_NAME}" in
+            *-*) flags="$flags --prerelease" ;;
+            *)   flags="$flags --latest" ;;
+          esac
+          gh release create "${GITHUB_REF_NAME}" $flags
