@@ -258,6 +258,12 @@ final class RiftImpl implements Rift {
             throw new IllegalStateException("intercept already started for this engine");
         }
         try {
+            if (options.isAttach()) {
+                // No listener to start: probe the already-running one (started at engine launch via
+                // --intercept-port), then bind to the given endpoint.
+                transport.interceptListRules();
+                return new InterceptImpl(transport, options.host(), options.port());
+            }
             JsonValue response = transport.startIntercept(options.toJson());
             return new InterceptImpl(transport, response);
         } catch (RuntimeException e) {

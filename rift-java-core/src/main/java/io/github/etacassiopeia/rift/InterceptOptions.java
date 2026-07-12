@@ -43,16 +43,42 @@ public final class InterceptOptions {
     private final int port;
     private final Path caCertPath;
     private final Path caKeyPath;
+    private final boolean attach;
 
-    private InterceptOptions(String host, int port, Path caCertPath, Path caKeyPath) {
+    private InterceptOptions(String host, int port, Path caCertPath, Path caKeyPath, boolean attach) {
         this.host = host;
         this.port = port;
         this.caCertPath = caCertPath;
         this.caKeyPath = caKeyPath;
+        this.attach = attach;
     }
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    /**
+     * Attach to an intercept listener the engine started at launch (via {@code --intercept-port} /
+     * {@code RIFT_INTERCEPT_PORT}) at {@code host:port}, rather than starting one. This is how a
+     * remote/connected engine — whose admin API can only <em>manage</em> a listener, not start one —
+     * exposes intercept; {@code host}/{@code port} are the reachable endpoint (e.g. a mapped Docker port).
+     */
+    public static InterceptOptions attach(String host, int port) {
+        Objects.requireNonNull(host, "host");
+        return new InterceptOptions(host, port, null, null, true);
+    }
+
+    /** Whether these options attach to an already-running listener rather than starting one. */
+    boolean isAttach() {
+        return attach;
+    }
+
+    String host() {
+        return host;
+    }
+
+    int port() {
+        return port;
     }
 
     /** The {@code {host,port,caCertPath,caKeyPath}} JSON the engine's {@code rift_start_intercept}/{@code POST /intercept} expects. */
@@ -75,7 +101,14 @@ public final class InterceptOptions {
         }
 
         public Builder host(String host) {
-            this.host = Objects.requireNonNull(host, "host");
+            Objects.requireNonNull(host, "host");
+            // The engine requires the intercept BIND host to be an IP literal (a hostname is rejected
+            // engine-side with a confusing error); validate client-side with a clear message.
+            if (!isIpLiteral(host)) {
+                throw new IllegalArgumentException(
+                        "intercept bind host must be an IP literal (e.g. 127.0.0.1 or 0.0.0.0), not '" + host + "'");
+            }
+            this.host = host;
             return this;
         }
 
@@ -127,7 +160,32 @@ public final class InterceptOptions {
         }
 
         public InterceptOptions build() {
-            return new InterceptOptions(host, port, caCertPath, caKeyPath);
+            return new InterceptOptions(host, port, caCertPath, caKeyPath, false);
+        }
+
+        /** An IPv4 literal (dotted quad, each octet 0-255) or an IPv6 literal (contains a colon). */
+        private static boolean isIpLiteral(String host) {
+            if (host.indexOf(':') >= 0) {
+                return true; // IPv6 literal (possibly bracketed)
+            }
+            String[] octets = host.split("\\.", -1);
+            if (octets.length != 4) {
+                return false;
+            }
+            for (String octet : octets) {
+                if (octet.isEmpty() || octet.length() > 3) {
+                    return false;
+                }
+                for (int i = 0; i < octet.length(); i++) {
+                    if (!Character.isDigit(octet.charAt(i))) {
+                        return false;
+                    }
+                }
+                if (Integer.parseInt(octet) > 255) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static void requireBothOrNeither(Object cert, Object key) {
