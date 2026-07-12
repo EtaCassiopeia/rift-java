@@ -68,6 +68,15 @@ HttpClient client = HttpClient.newBuilder()
 This is the right default for test code: it needs no cleanup, leaves nothing behind, and works
 identically whether the CA is ephemeral or committed.
 
+`sslContext()` trusts **only** the intercept CA — right for a fully hermetic SUT. If the same SUT
+also makes real HTTPS calls (say it exports telemetry over TLS while its mocked dependency is
+intercepted), use `sslContextWithSystemCAs()` instead, which trusts the intercept CA **and** the
+JVM's default trust anchors:
+
+```java
+SSLContext ssl = intercept.trust().sslContextWithSystemCAs();   // intercepted hosts + real HTTPS
+```
+
 ### 2. Exported truststore — for a JVM-wide `-Djavax.net.ssl.trustStore`
 
 When the client under test is out of your control (a third-party HTTP client, a subprocess, a
@@ -139,6 +148,11 @@ intercept.serve("cdn.optimizely.com", okJson(datafileJson));
 intercept.trust().exportTruststore(
         TruststoreFormat.JKS, "changeit", Path.of("intercept/rift-truststore.jks"));
 ```
+
+> Because `-Djavax.net.ssl.trustStore` **replaces** the container's whole truststore, a SUT that also
+> makes real HTTPS calls (telemetry, other live upstreams) would then fail those handshakes. Export
+> with `exportTruststoreWithSystemCAs(...)` instead — same file, but it also carries the JVM's default
+> trust anchors, so real endpoints keep working alongside the intercepted ones.
 
 **3. The container trusts the CA and proxies its HTTPS through the host.** Under Docker the
 interceptor is reachable at `host.docker.internal`; mount the truststore and set the JVM's trust +
