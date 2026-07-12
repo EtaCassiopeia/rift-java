@@ -106,6 +106,69 @@ confusing engine-side error. With a committed CA, every engine instance that loa
 byte-identical trust material, so one exported truststore (or one `sslContext()` derived from the
 same PEM) works across all of them.
 
+### Sharing one CA with a containerized SUT
+
+The in-memory `sslContext()` above assumes the client lives in the **same JVM** as the test. When
+the system under test runs in its **own container** (or any process started before the test), it
+must already trust the intercept CA at startup — so the ephemeral per-listener CA won't do. Commit
+one CA, have the interceptor load it, and hand the container a truststore built from the same CA.
+Both sides then share a single trust anchor and the TLS handshake between them succeeds.
+
+**1. Generate the CA once** and commit `ca-cert.pem` + `ca-key.pem`:
+
+```sh
+openssl req -x509 -newkey rsa:2048 -nodes -keyout ca-key.pem -out ca-cert.pem \
+  -days 3650 -subj "/CN=rift-intercept-ca"
+```
+
+**2. The interceptor loads that committed CA on a fixed, container-reachable port:**
+
+```java
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+
+Intercept intercept = rift.intercept(InterceptOptions.builder()
+        .host("0.0.0.0")               // reachable from the container, not just loopback
+        .port(8888)                    // fixed — matches the container's proxyPort
+        .ca(Path.of("intercept/ca-cert.pem"), Path.of("intercept/ca-key.pem"))
+        .build());
+
+intercept.serve("cdn.optimizely.com", okJson(datafileJson));
+
+// Write the truststore the container will mount. Because it is derived from the committed CA, it
+// grants exactly the same trust as sslContext() would in-JVM.
+intercept.trust().exportTruststore(
+        TruststoreFormat.JKS, "changeit", Path.of("intercept/rift-truststore.jks"));
+```
+
+**3. The container trusts the CA and proxies its HTTPS through the host.** Under Docker the
+interceptor is reachable at `host.docker.internal`; mount the truststore and set the JVM's trust +
+proxy properties:
+
+```yaml
+services:
+  sut:
+    environment:
+      JDK_JAVA_OPTIONS: >-
+        -Dhttps.proxyHost=host.docker.internal
+        -Dhttps.proxyPort=8888
+        -Djavax.net.ssl.trustStore=/intercept-certs/rift-truststore.jks
+        -Djavax.net.ssl.trustStorePassword=changeit
+    volumes:
+      - "./intercept:/intercept-certs"
+```
+
+Because the CA is committed, the container can be built and started **before** the test runs — it
+trusts the anchor up front, and the interceptor signs each intercepted leaf with the matching key.
+For a non-JVM SUT, point its own trust mechanism at `ca-cert.pem` instead (e.g.
+`NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, or the OS trust store).
+
+> **Today the rift *engine* must be able to read the CA files itself.** That holds for the embedded
+> transport — the engine runs inside the test JVM, so the paths are ordinary local paths (the case
+> above). If you instead run rift as a **separate container** and reach it via `Rift.connect(...)`,
+> the `ca(...)` paths are resolved *inside the rift container*, so mount the CA there too. Supplying
+> CA material **in memory** (a PEM string / bytes / `KeyStore`, e.g. from a secret) and shipping it
+> to a remote engine are tracked in [#82](https://github.com/EtaCassiopeia/rift-java/issues/82).
+
 ## Wiring an `HttpClient`
 
 The two pieces a `java.net.http.HttpClient` needs are the trusted `SSLContext` and a
