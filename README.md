@@ -199,7 +199,9 @@ try (Rift rift = Rift.spawn()) {           // resolves (or downloads) and launch
 ```
 
 Binary resolution order: `SpawnOptions.binaryPath(...)`, the `RIFT_BINARY_PATH` environment
-variable, a `PATH` lookup, a local version cache, then a download from the release mirror.
+variable, a `PATH` lookup, a local version cache, then a download from the release mirror. The
+version defaults to the engine the SDK is pinned to and tested against (`<rift.engine.version>`),
+not the compatibility floor — override with `SpawnOptions.builder().version("X.Y.Z")`.
 
 ### JUnit 5
 

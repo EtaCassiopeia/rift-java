@@ -104,7 +104,7 @@ public final class SpawnOptions {
     public static final class Builder {
 
         private Optional<Path> binaryPath = Optional.empty();
-        private String version = RiftImpl.MIN_ENGINE_VERSION;
+        private String version = RiftVersion.engineVersion();
         private String host = "127.0.0.1";
         private int adminPort = 0;
         private boolean allowInjection = true;
@@ -125,6 +125,12 @@ public final class SpawnOptions {
             return this;
         }
 
+        /**
+         * The rift engine version to spawn (resolve/download). Defaults to the version the SDK is
+         * pinned to and tested against ({@link RiftVersion#engineVersion()}, from
+         * {@code <rift.engine.version>}), not the compatibility floor — so {@code spawn()} runs the
+         * same engine the rest of the SDK targets.
+         */
         public Builder version(String version) {
             this.version = Objects.requireNonNull(version, "version");
             return this;
