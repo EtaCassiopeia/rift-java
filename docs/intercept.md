@@ -134,6 +134,21 @@ confusing engine-side error. With a committed CA, every engine instance that loa
 byte-identical trust material, so one exported truststore (or one `sslContext()` derived from the
 same PEM) works across all of them.
 
+**CA material in memory (no caller-side file).** When the CA comes from a secret store rather than a
+file, pass it directly — as PEM text, bytes, or a `KeyStore`:
+
+```java
+.ca(certPem, keyPem)            // String PEM (e.g. from an env var / Vault)
+.ca(certBytes, keyBytes)        // byte[] PEM
+.ca(keyStore, password)         // a JKS/PKCS12 holding the CA's cert + key
+```
+
+The SDK writes the material to a private, owner-only temp file it owns (deleted on JVM exit) and the
+engine loads it from there — so, exactly like a file-path CA, the path must be readable by the
+engine. That's automatic for the embedded engine; a **containerized remote** engine still needs the
+CA on its own filesystem (mount it, or await engine-side inline-bytes support —
+[#82](https://github.com/EtaCassiopeia/rift-java/issues/82)).
+
 ### Sharing one CA with a containerized SUT
 
 The in-memory `sslContext()` above assumes the client lives in the **same JVM** as the test. When
@@ -195,12 +210,13 @@ trusts the anchor up front, and the interceptor signs each intercepted leaf with
 For a non-JVM SUT, point its own trust mechanism at `ca-cert.pem` instead (e.g.
 `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, or the OS trust store).
 
-> **Today the rift *engine* must be able to read the CA files itself.** That holds for the embedded
-> transport — the engine runs inside the test JVM, so the paths are ordinary local paths (the case
-> above). If you instead run rift as a **separate container** and reach it via `Rift.connect(...)`,
-> the `ca(...)` paths are resolved *inside the rift container*, so mount the CA there too. Supplying
-> CA material **in memory** (a PEM string / bytes / `KeyStore`, e.g. from a secret) and shipping it
-> to a remote engine are tracked in [#82](https://github.com/EtaCassiopeia/rift-java/issues/82).
+> **The rift *engine* must be able to read the CA itself.** That holds for the embedded transport —
+> the engine runs inside the test JVM, so a path (or an in-memory CA's temp file, see above) is
+> ordinary and local. If you instead run rift as a **separate container** and reach it via
+> `Rift.connect(...)`, the CA is resolved *inside the rift container*, so mount it there too —
+> in-memory input doesn't change that (it still lands in a local temp file). Shipping CA bytes to a
+> containerized remote engine without a mount awaits engine-side inline support
+> ([#82](https://github.com/EtaCassiopeia/rift-java/issues/82)).
 
 ## Wiring an `HttpClient`
 

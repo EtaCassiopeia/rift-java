@@ -2,6 +2,7 @@ package io.github.etacassiopeia.rift.embedded;
 
 import io.github.etacassiopeia.rift.EmbeddedOptions;
 import io.github.etacassiopeia.rift.Intercept;
+import io.github.etacassiopeia.rift.InterceptOptions;
 import io.github.etacassiopeia.rift.InterceptRule;
 import io.github.etacassiopeia.rift.Rift;
 import io.github.etacassiopeia.rift.RuleKind;
@@ -124,6 +125,34 @@ class InterceptE2eIT {
                 intercept.close();
             }
         }
+    }
+
+    @Test
+    void inMemoryCaIsLoadedByTheEngine() throws Exception {
+        String certPem = resource("/test-inmemory-ca-cert.pem");
+        String keyPem = resource("/test-inmemory-ca-key.pem");
+        try (Rift rift = embedded()) {
+            // Supply the CA entirely in memory (no caller-side file); the engine must adopt it, not
+            // mint an ephemeral one — so its exported CA equals the certificate we passed in.
+            Intercept intercept = rift.intercept(InterceptOptions.builder().ca(certPem, keyPem).build());
+            try {
+                assertEquals(parseCert(certPem), parseCert(intercept.trust().caPem()),
+                        "the engine's exported CA is the in-memory CA we supplied");
+            } finally {
+                intercept.close();
+            }
+        }
+    }
+
+    private static String resource(String name) throws Exception {
+        try (java.io.InputStream in = InterceptE2eIT.class.getResourceAsStream(name)) {
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+    }
+
+    private static java.security.cert.Certificate parseCert(String pem) throws Exception {
+        return java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(
+                new java.io.ByteArrayInputStream(pem.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
     }
 
     @Test
