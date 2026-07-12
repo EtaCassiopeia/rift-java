@@ -67,7 +67,7 @@ public final class EmbeddedOptions {
     public static final class Builder {
 
         private Optional<Path> libraryPath = Optional.empty();
-        private VersionCheck versionCheck = VersionCheck.FAIL;
+        private VersionCheck versionCheck = VersionCheck.resolveDefault();
         private boolean serveAdminEagerly = false;
         private String adminHost = "127.0.0.1";
         private int adminPort = 0;

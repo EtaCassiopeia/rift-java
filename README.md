@@ -131,6 +131,11 @@ dependencies {
 > use `rift-java-embedded-jdk21`, which also requires `--enable-preview`). The
 > [BOM README](rift-java-bom/README.md#picking-a-natives-classifier-automatically-os-maven-plugin)
 > shows how to select the right classifier automatically.
+>
+> Pointing at a locally-built or vendored engine? Override the library path and the version
+> preflight from the launch command — no code change:
+> `-Drift.ffi.lib=native/librift_ffi.dylib -Drift.versionCheck=off` (`rift.versionCheck` /
+> `RIFT_VERSION_CHECK` accept `off`/`warn`/`fail`; the default is `fail`).
 
 ## Quick starts
 
