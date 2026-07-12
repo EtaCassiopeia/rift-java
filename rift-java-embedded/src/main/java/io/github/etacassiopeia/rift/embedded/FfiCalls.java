@@ -120,10 +120,14 @@ final class FfiCalls {
     }
 
     void addStub(int port, JsonValue stub) {
+        // index < 0 appends; direct FFI never auto-assigns a position (mirrors rift_add_stub).
+        addStub(port, stub, -1);
+    }
+
+    void addStub(int port, JsonValue stub, int index) {
         ensureLive();
         try (Arena args = Arena.ofConfined()) {
-            // index < 0 appends; direct FFI never auto-assigns a position (mirrors rift_add_stub).
-            int rc = ffi.addStub(handle, port, FfmCompat.allocateCString(args, stub.toJson()), -1);
+            int rc = ffi.addStub(handle, port, FfmCompat.allocateCString(args, stub.toJson()), index);
             if (rc != 0) {
                 throw engineError();
             }

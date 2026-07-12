@@ -6,6 +6,7 @@ import io.github.etacassiopeia.rift.error.EngineUnavailable;
 import io.github.etacassiopeia.rift.error.ImposterNotFound;
 import io.github.etacassiopeia.rift.error.InvalidDefinition;
 import io.github.etacassiopeia.rift.json.JsonArray;
+import io.github.etacassiopeia.rift.json.JsonNumber;
 import io.github.etacassiopeia.rift.json.JsonObject;
 import io.github.etacassiopeia.rift.json.JsonString;
 import io.github.etacassiopeia.rift.json.JsonValue;
@@ -125,6 +126,13 @@ public final class RemoteTransport implements RiftTransport {
     public void addStub(int port, JsonValue stub) {
         // POST /imposters/{port}/stubs expects a {"stub":{...}} envelope; a bare stub is rejected (400).
         JsonValue body = JsonObject.builder().put("stub", stub).build();
+        executeVoid("POST", "/imposters/" + port + "/stubs", body.toJson(), OptionalInt.of(port));
+    }
+
+    @Override
+    public void addStub(int port, JsonValue stub, int index) {
+        // Same endpoint, with the optional positional `index` (AddStubRequest.index in the engine).
+        JsonValue body = JsonObject.builder().put("stub", stub).put("index", JsonNumber.of(index)).build();
         executeVoid("POST", "/imposters/" + port + "/stubs", body.toJson(), OptionalInt.of(port));
     }
 

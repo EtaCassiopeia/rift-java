@@ -40,6 +40,15 @@ public interface RiftTransport extends AutoCloseable {
 
     void addStub(int port, JsonValue stub);
 
+    /**
+     * Inserts {@code stub} at {@code index} (0 = first / highest match priority). The default falls
+     * back to {@link #addStub(int, JsonValue)} (ignoring the position) so existing test fakes keep
+     * compiling; the real transports override with a positional insert.
+     */
+    default void addStub(int port, JsonValue stub, int index) {
+        addStub(port, stub);
+    }
+
     void replaceStubs(int port, JsonValue stubs);
 
     void replaceStub(int port, StubAddress addr, JsonValue stub);

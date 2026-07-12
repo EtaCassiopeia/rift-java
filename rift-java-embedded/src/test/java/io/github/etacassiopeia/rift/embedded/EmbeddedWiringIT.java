@@ -3,6 +3,8 @@ package io.github.etacassiopeia.rift.embedded;
 import io.github.etacassiopeia.rift.EmbeddedOptions;
 import io.github.etacassiopeia.rift.Imposter;
 import io.github.etacassiopeia.rift.Rift;
+import io.github.etacassiopeia.rift.StubRef;
+import io.github.etacassiopeia.rift.error.InvalidDefinition;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -14,8 +16,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.onGet;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.status;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -59,5 +64,41 @@ class EmbeddedWiringIT {
 
             assertNotNull(imposter.recorded());
         }
+    }
+
+    @Test
+    void addStubFirstOverridesThenRevertsOnDelete() throws Exception {
+        try (Rift rift = Rift.embedded(EmbeddedOptions.builder().libraryPath(lib).build())) {
+            Imposter imposter = rift.create(RiftDslImposter());
+            assertEquals(200, get(imposter, "/x"), "base stub answers 200");
+
+            // Prepend an override for the same path; first-match-wins → 418.
+            StubRef override = imposter.addStubFirst(onGet("/x").willReturn(status(418)));
+            assertEquals(418, get(imposter, "/x"), "the front stub overrides the base");
+
+            // Remove the overlay → the base stub matches again.
+            override.delete();
+            assertEquals(200, get(imposter, "/x"), "deleting the overlay reverts to the base stub");
+        }
+    }
+
+    @Test
+    void addStubWithOutOfRangeIndexIsRejectedClientSide() {
+        try (Rift rift = Rift.embedded(EmbeddedOptions.builder().libraryPath(lib).build())) {
+            Imposter imposter = rift.create(RiftDslImposter());
+            assertThrows(InvalidDefinition.class,
+                    () -> imposter.addStub(onGet("/y").willReturn(status(200)), 999));
+        }
+    }
+
+    private static io.github.etacassiopeia.rift.dsl.ImposterSpec RiftDslImposter() {
+        return io.github.etacassiopeia.rift.dsl.RiftDsl.imposter("overlay").record()
+                .stub(onGet("/x").willReturn(status(200)));
+    }
+
+    private static int get(Imposter imposter, String path) throws Exception {
+        return HTTP.send(HttpRequest.newBuilder(URI.create(imposter.uri() + path))
+                .timeout(Duration.ofSeconds(5)).GET().build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode();
     }
 }
