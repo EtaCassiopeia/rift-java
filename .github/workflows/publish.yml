@@ -43,20 +43,46 @@ jobs:
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # JDK 21 (LTS) builds the zero-dep modules plus the JDK 21 embedded variant. Dual-artifact
-      # publishing of the stable JDK 22 embedded jar is refined in #11.
-      - name: Set up JDK 21
+      # The reactor runs on JDK 21 (LTS): it builds the zero-dep modules and the JDK 21 preview
+      # embedded variant (rift-java-embedded-jdk21) natively. JDK 22 is installed alongside so the
+      # stable-FFM rift-java-embedded jar can be compiled via a toolchain in the same reactor and
+      # published from the same run (-DdualEmbedded below). setup-java lists 22 first so JAVA_HOME
+      # ends up pointing at 21, and exports JAVA_HOME_22_X64 for the toolchains.xml step.
+      - name: Set up JDK 21 (reactor) and JDK 22 (toolchain)
         if: steps.guard.outputs.deploy == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: |
+            22
+            21
           cache: maven
           server-id: central
           server-username: MAVEN_CENTRAL_USERNAME
           server-password: MAVEN_CENTRAL_PASSWORD
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      # Register the JDK 22 install as a Maven toolchain so rift-java-embedded's compiler/javadoc
+      # (its dual-embedded profile) run under JDK 22 while the reactor stays on JDK 21.
+      - name: Register the JDK 22 toolchain
+        if: steps.guard.outputs.deploy == 'true'
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/toolchains.xml <<XML
+          <?xml version="1.0" encoding="UTF-8"?>
+          <toolchains>
+            <toolchain>
+              <type>jdk</type>
+              <provides>
+                <version>22</version>
+              </provides>
+              <configuration>
+                <jdkHome>${JAVA_HOME_22_X64}</jdkHome>
+              </configuration>
+            </toolchain>
+          </toolchains>
+          XML
 
       # On a tag vX.Y.Z, stamp every module with the release version X.Y.Z so the reactor deploys a
       # RELEASE (not the -SNAPSHOT). A push to master leaves the -SNAPSHOT version untouched.
@@ -76,7 +102,9 @@ jobs:
         # natives-bundle fetches + jars the six librift_ffi classifier jars the BOM pins, so the
         # embedded transport is resolvable from Central. GH-Actions egress to the rift release assets
         # is clean; sha256 is verified against ffi-manifest.json during the fetch.
-        run: ./mvnw -B -ntp -Prelease,natives-bundle -DskipTests deploy
+        # dualEmbedded pulls the stable-FFM rift-java-embedded jar into this JDK 21 reactor (compiled
+        # via the JDK 22 toolchain) so both embedded variants publish from one deploy.
+        run: ./mvnw -B -ntp -Prelease,natives-bundle -DdualEmbedded -DskipTests deploy
 
       # Publishing to Central only appears under Tags; create the Release object so a pushed tag also
       # shows under Releases. A pre-release tag (contains a hyphen, e.g. v0.1.0-RC1) is not marked Latest.
