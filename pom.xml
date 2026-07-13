@@ -254,6 +254,9 @@
             <extensions>true</extensions>
             <configuration>
               <publishingServerId>central</publishingServerId>
+              <!-- Name the Portal deployment after the artifact + version instead of the plugin's
+                   generic "Deployment", so releases are identifiable in the Central UI. -->
+              <deploymentName>rift-java ${project.version}</deploymentName>
               <!-- Snapshots deploy immediately; releases are auto-published once validated. -->
               <autoPublish>true</autoPublish>
               <waitUntil>validated</waitUntil>
