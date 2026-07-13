@@ -162,7 +162,18 @@ jobs:
 
           ./mvnw -B -ntp versions:set -DnewVersion="$NEXT" -DprocessAllModules -DgenerateBackupPoms=false
 
+          # Pin the README's install snippets to the just-released version so they never go stale.
+          # Anchored to the stable-version spots only: the "current release" line, the stable channel
+          # example, and the Maven/Gradle BOM coordinates. The `-SNAPSHOT` example and the engine
+          # placeholder version are deliberately not matched.
+          sed -i -E \
+            -e "s/(current release is \*\*)[0-9]+\.[0-9]+\.[0-9]+(\*\*)/\1${RELEASED}\2/" \
+            -e "s/(e\.g\. \`)[0-9]+\.[0-9]+\.[0-9]+(\`)/\1${RELEASED}\2/" \
+            -e "s#(<version>)[0-9]+\.[0-9]+\.[0-9]+(</version> <!-- or)#\1${RELEASED}\2#" \
+            -e "s#(rift-java-bom:)[0-9]+\.[0-9]+\.[0-9]+#\1${RELEASED}#" \
+            README.md
+
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "chore(release): set development version to $NEXT"
+          git commit -am "chore(release): set development version to $NEXT, sync README to $RELEASED"
           git push origin HEAD:master

@@ -5,7 +5,7 @@ Mountebank-compatible HTTP/HTTPS mock server written in Rust.
 
 📖 **Documentation site: [etacassiopeia.github.io/rift-java](https://etacassiopeia.github.io/rift-java/)**
 
-> **Available on Maven Central.** The current release is **0.1.0** under the
+> **Available on Maven Central.** The current release is **0.1.1** under the
 > `io.github.etacassiopeia` group ID. The public API is documented on the
 > [docs site](https://etacassiopeia.github.io/rift-java/) and
 > [docs/design/sdk-api.md](docs/design/sdk-api.md). Stable releases go to Maven Central on each
@@ -55,7 +55,7 @@ rift-java is published under the `io.github.etacassiopeia` group ID, on two chan
 
 | Channel | Repository | Version form | Use for |
 |---|---|---|---|
-| **Stable release** | Maven Central — the default, no config needed | `X.Y.Z` (e.g. `0.1.0`) | CI / regular test suites |
+| **Stable release** | Maven Central — the default, no config needed | `X.Y.Z` (e.g. `0.1.1`) | CI / regular test suites |
 | **Snapshot** | [Central Portal snapshots](https://central.sonatype.com/repository/maven-snapshots/) — must be added | `X.Y.Z-SNAPSHOT` (e.g. `0.1.0-SNAPSHOT`) | trying the latest `master` |
 
 The recommended entry point is the **BOM** (`rift-java-bom`): import it once and every module is
@@ -73,7 +73,7 @@ per-module `<version>`:
     <dependency>
       <groupId>io.github.etacassiopeia</groupId>
       <artifactId>rift-java-bom</artifactId>
-      <version>0.1.0</version> <!-- or X.Y.Z-SNAPSHOT for the latest master -->
+      <version>0.1.1</version> <!-- or X.Y.Z-SNAPSHOT for the latest master -->
       <type>pom</type>
       <scope>import</scope>
     </dependency>
@@ -122,7 +122,7 @@ repositories {
 }
 
 dependencies {
-    testImplementation(platform("io.github.etacassiopeia:rift-java-bom:0.1.0")) // or X.Y.Z-SNAPSHOT for the latest master
+    testImplementation(platform("io.github.etacassiopeia:rift-java-bom:0.1.1")) // or X.Y.Z-SNAPSHOT for the latest master
     testImplementation("io.github.etacassiopeia:rift-java-core")
     testImplementation("io.github.etacassiopeia:rift-java-junit5")
 }
