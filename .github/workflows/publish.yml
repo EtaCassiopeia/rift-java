@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: write # create the GitHub Release object on a tag
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -50,7 +50,7 @@ jobs:
       # ends up pointing at 21, and exports JAVA_HOME_22_X64 for the toolchains.xml step.
       - name: Set up JDK 21 (reactor) and JDK 22 (toolchain)
         if: steps.guard.outputs.deploy == 'true'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: |
@@ -132,12 +132,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: master
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
