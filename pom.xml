@@ -173,6 +173,25 @@
       </modules>
     </profile>
 
+    <!-- Release path only: pull the stable-FFM rift-java-embedded (JDK 22+) into the JDK 21 deploy
+         reactor so BOTH embedded variants publish from one run. On JDK 21 the `embedded` profile
+         above is inactive, so this is the module's only way into the reactor; it compiles via a
+         JDK 22 toolchain (see rift-java-embedded's own `dual-embedded` profile) that must be present
+         in ~/.m2/toolchains.xml. Activated by -DdualEmbedded, which the publish workflow passes on
+         the JDK 21 deploy. Do NOT combine -DdualEmbedded with a JDK 22+ reactor: the `embedded`
+         profile would then also add the module and the reactor would reject the duplicate. -->
+    <profile>
+      <id>dual-embedded</id>
+      <activation>
+        <property>
+          <name>dualEmbedded</name>
+        </property>
+      </activation>
+      <modules>
+        <module>rift-java-embedded</module>
+      </modules>
+    </profile>
+
     <!-- Signing + sources + javadoc + Central publishing. Enabled explicitly on deploy. -->
     <profile>
       <id>release</id>

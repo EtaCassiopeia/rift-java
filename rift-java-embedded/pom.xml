@@ -57,4 +57,42 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!-- Release path: this module is pulled into the JDK 21 deploy reactor (root pom's
+         `dual-embedded` profile) so it publishes alongside rift-java-embedded-jdk21. Its stable FFM
+         sources need JDK 22+, so compile and javadoc them through a JDK 22 toolchain (declared in
+         ~/.m2/toolchains.xml on the runner) instead of the reactor's JDK 21. `maven.compiler.release`
+         stays 22 above; the toolchain only changes which JDK runs javac/javadoc. -->
+    <profile>
+      <id>dual-embedded</id>
+      <activation>
+        <property>
+          <name>dualEmbedded</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+              <jdkToolchain>
+                <version>22</version>
+              </jdkToolchain>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <configuration>
+              <jdkToolchain>
+                <version>22</version>
+              </jdkToolchain>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
