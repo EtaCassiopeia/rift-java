@@ -38,6 +38,17 @@ public interface Imposter {
 
     StubRef addStub(JsonValue stub);
 
+    /**
+     * Raw-JSON form of {@link #addStub(StubSpec, int)} — the escape hatch for callers holding a
+     * fully-formed stub (an SDK bridge, a golden file). {@code stub} is passed to the engine as-is:
+     * fields the DSL cannot express ({@code extra}, {@code _rift}) survive, and the engine — not this
+     * SDK — validates the content. {@code index} must be in {@code [0, stubCount]}.
+     */
+    StubRef addStub(JsonValue stub, int index);
+
+    /** Raw-JSON form of {@link #addStubFirst(StubSpec)} — sugar for {@code addStub(stub, 0)}. */
+    StubRef addStubFirst(JsonValue stub);
+
     /** Starts a proxy recording to {@code originUrl} with the default {@link RecordSpec}. */
     Recording startRecording(String originUrl);
 
@@ -45,6 +56,16 @@ public interface Imposter {
     Recording startRecording(String originUrl, RecordSpec spec);
 
     void replaceStubs(List<StubSpec> specs);
+
+    /**
+     * Raw-JSON form of {@link #replaceStubs(List)} — {@code stubs} must be a {@code JsonArray} of stub
+     * objects, passed to the engine as-is (see {@link #addStub(JsonValue, int)} for the pass-through
+     * contract). Takes a single {@code JsonValue} rather than a {@code List<JsonValue>} because the
+     * latter would erase to the same signature as {@link #replaceStubs(List)}.
+     *
+     * @throws io.github.etacassiopeia.rift.error.InvalidDefinition if {@code stubs} is not a JSON array
+     */
+    void replaceStubs(JsonValue stubs);
 
     StubRef stub(String id);
 

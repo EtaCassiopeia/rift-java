@@ -35,7 +35,12 @@ final class SpaceImpl implements Space {
 
     @Override
     public StubRef addStub(StubSpec spec) {
-        transport.spaceAddStub(port, flowId, JsonValue.parse(spec.build().toJson()));
+        return addStub(JsonValue.parse(spec.build().toJson()));
+    }
+
+    @Override
+    public StubRef addStub(JsonValue stub) {
+        transport.spaceAddStub(port, flowId, stub);
         int index = stubs().size() - 1;
         return new StubRefImpl(port, transport, new StubAddress.ByIndex(index));
     }

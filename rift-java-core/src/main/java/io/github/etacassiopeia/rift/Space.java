@@ -1,6 +1,7 @@
 package io.github.etacassiopeia.rift;
 
 import io.github.etacassiopeia.rift.dsl.StubSpec;
+import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.Stub;
 import io.github.etacassiopeia.rift.verify.RequestMatch;
 import io.github.etacassiopeia.rift.verify.VerificationTimes;
@@ -13,6 +14,13 @@ public interface Space {
     String flowId();
 
     StubRef addStub(StubSpec spec);
+
+    /**
+     * Raw-JSON form of {@link #addStub(StubSpec)} — {@code stub} is added to this space as-is,
+     * preserving fields the DSL cannot express ({@code extra}, {@code _rift}); the engine validates
+     * the content.
+     */
+    StubRef addStub(JsonValue stub);
 
     List<Stub> stubs();
 
