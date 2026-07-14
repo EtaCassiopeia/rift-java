@@ -5,7 +5,9 @@ import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.ImposterDefinition;
 import io.github.etacassiopeia.rift.model.Stub;
 import io.github.etacassiopeia.rift.verify.RequestMatch;
+import io.github.etacassiopeia.rift.verify.VerificationResult;
 import io.github.etacassiopeia.rift.verify.VerificationTimes;
+import io.github.etacassiopeia.rift.verify.VerifyDetail;
 
 import java.net.URI;
 import java.util.List;
@@ -103,6 +105,31 @@ public interface Imposter {
 
     /** Verifies the number of recorded requests matching {@code match}'s predicates satisfies {@code times}. */
     void verify(RequestMatch match, VerificationTimes times);
+
+    /**
+     * The same verification as {@link #verify(RequestMatch)} as a value rather than a pass/throw —
+     * {@code satisfied} reflects "at least once". See {@link #verifyResult(RequestMatch,
+     * VerificationTimes, VerifyDetail...)} for the full contract.
+     */
+    VerificationResult verifyResult(RequestMatch match, VerifyDetail... details);
+
+    /**
+     * Counts recorded requests matching {@code match}'s predicates, without throwing — the typed
+     * query behind {@link #verify(RequestMatch, VerificationTimes)}, for callers that want the
+     * near-miss as data (an SDK bridge rendering its own assertion failures).
+     *
+     * <p>Matching is evaluated by the <em>engine</em>, so the verdict is the same one the request
+     * hot path applies — {@code inject}/{@code xpath} predicates are honoured rather than rejected.
+     * Each {@link VerifyDetail} is opt-in because it costs work and wire bytes; with none, only the
+     * counts are fetched.
+     *
+     * @throws io.github.etacassiopeia.rift.error.InvalidDefinition if this imposter does not record
+     *     requests — the engine would otherwise count {@code 0} of {@code 0} indistinguishably from
+     *     genuinely-no-traffic
+     * @throws UnsupportedOperationException if the underlying transport does not implement
+     *     verification (custom {@code RiftTransport} implementations predating this API)
+     */
+    VerificationResult verifyResult(RequestMatch match, VerificationTimes times, VerifyDetail... details);
 
     /** Verifies this imposter recorded no requests at all. */
     void verifyNoInteractions();

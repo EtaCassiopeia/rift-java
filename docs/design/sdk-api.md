@@ -287,8 +287,10 @@ public interface Imposter {
   List<RecordedRequest> recorded(RequestMatch match);      // client-side filtered
   void clearRecorded();
   void clearProxyResponses();                              // DELETE savedProxyResponses
-  void verify(RequestMatch match);                         // == atLeastOnce()
+  void verify(RequestMatch match);                         // == atLeastOnce(); engine-evaluated (§7.7)
   void verify(RequestMatch match, VerificationTimes times);
+  VerificationResult verifyResult(RequestMatch match, VerifyDetail... details);                       // non-throwing, typed
+  VerificationResult verifyResult(RequestMatch match, VerificationTimes times, VerifyDetail... details);
   void verifyNoInteractions();
 
   // -- scenarios (FSM) --
@@ -327,6 +329,8 @@ public interface Space {
   List<RecordedRequest> recorded();
   List<RecordedRequest> recorded(RequestMatch match);
   void verify(RequestMatch match);            // same semantics as Imposter.verify, space-scoped
+  VerificationResult verifyResult(RequestMatch match, VerifyDetail... details);                       // space-scoped (flowId)
+  VerificationResult verifyResult(RequestMatch match, VerificationTimes times, VerifyDetail... details);
   void verify(RequestMatch match, VerificationTimes times);
   void delete();                              // tears down stubs + recorded + state for the space
 }
@@ -477,6 +481,33 @@ public interface RequestMatch {
   static RequestMatch of(List<Predicate> predicates);   static RequestMatch of(Predicate... predicates);
   static RequestMatch ofJson(JsonValue predicateArray); static RequestMatch ofJson(String predicateArrayJson);
 }
+```
+
+**Verification defers to the engine** (#127). `verify` POSTs `/imposters/{port}/verify` and the
+engine's evaluator — the same one the request hot path uses — decides; this SDK never re-implements
+matching, so a verdict can never drift from a stub's. Consequences: `inject`/`xpath` predicates are
+honoured in `verify` (not rejected client-side); a custom `RiftTransport` must implement `verify`;
+remote requires an engine with `POST /imposters/{port}/verify` (rift#494). `recorded(match)` stays a
+client-side convenience filter, and `verifyNoInteractions` a client-side emptiness check — neither
+is a predicate verdict.
+
+`verifyResult` is the same verification as a value — the typed seam a bridge renders its own
+assertion failures from (no diff-string scraping):
+
+```java
+VerificationResult verifyResult(RequestMatch match, VerifyDetail... details);                       // satisfied = atLeastOnce
+VerificationResult verifyResult(RequestMatch match, VerificationTimes times, VerifyDetail... details);
+
+enum VerifyDetail { REQUESTS, CLOSEST }   // each opt-in: none → counts only, no journal shipped
+
+record VerificationResult(int matched, int total, boolean satisfied,
+        List<RecordedRequest> requests,      // empty unless REQUESTS requested
+        Optional<ClosestMiss> closest) {     // present iff CLOSEST requested and a non-match existed
+  static VerificationResult read(JsonValue envelope, VerificationTimes times);   // bridge-facing parse seam
+}
+record ClosestMiss(RecordedRequest request, List<FailedPredicate> failedPredicates) {}
+record FailedPredicate(Predicate predicate, JsonValue actual) {}   // actual: raw — shape follows the predicate
+// an off-contract envelope is a CommunicationError (the RiftException hierarchy — §1.4), as in EngineInfo/ApplyResult.read
 
 public final class VerificationTimes {                    // factories re-exported on RiftDsl
   static VerificationTimes times(int n);      static VerificationTimes exactly(int n);   // alias

@@ -4,7 +4,9 @@ import io.github.etacassiopeia.rift.dsl.StubSpec;
 import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.Stub;
 import io.github.etacassiopeia.rift.verify.RequestMatch;
+import io.github.etacassiopeia.rift.verify.VerificationResult;
 import io.github.etacassiopeia.rift.verify.VerificationTimes;
+import io.github.etacassiopeia.rift.verify.VerifyDetail;
 
 import java.util.List;
 
@@ -34,6 +36,16 @@ public interface Space {
 
     /** Verifies the number of requests recorded within this space matching {@code match}'s predicates satisfies {@code times}. */
     void verify(RequestMatch match, VerificationTimes times);
+
+    /** Space-scoped {@link Imposter#verifyResult(RequestMatch, VerifyDetail...)}. */
+    VerificationResult verifyResult(RequestMatch match, VerifyDetail... details);
+
+    /**
+     * Space-scoped {@link Imposter#verifyResult(RequestMatch, VerificationTimes, VerifyDetail...)}:
+     * the engine counts only this space's traffic. Unlike the imposter form there is no
+     * record-requests precondition — recording is configured on the owning imposter.
+     */
+    VerificationResult verifyResult(RequestMatch match, VerificationTimes times, VerifyDetail... details);
 
     void delete();
 }

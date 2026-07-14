@@ -17,7 +17,9 @@ import io.github.etacassiopeia.rift.transport.StubAddress;
 import io.github.etacassiopeia.rift.verify.PredicateEvaluator;
 import io.github.etacassiopeia.rift.verify.RequestMatch;
 import io.github.etacassiopeia.rift.verify.VerificationException;
+import io.github.etacassiopeia.rift.verify.VerificationResult;
 import io.github.etacassiopeia.rift.verify.VerificationTimes;
+import io.github.etacassiopeia.rift.verify.VerifyDetail;
 
 import java.lang.System.Logger.Level;
 import java.net.URI;
@@ -280,25 +282,39 @@ final class ImposterImpl implements Imposter {
 
     @Override
     public void verify(RequestMatch match, VerificationTimes times) {
+        // One engine call: the verdict and the diff that explains it come from the same journal
+        // snapshot, so a request arriving mid-verify can't make them contradict each other.
+        VerificationResult result = verifyResult(match, times, VerifyDetail.CLOSEST);
+        if (!result.satisfied()) {
+            throw new VerificationException(port, name(), match, times, result);
+        }
+    }
+
+    @Override
+    public VerificationResult verifyResult(RequestMatch match, VerifyDetail... details) {
+        return verifyResult(match, VerificationTimes.atLeast(1), details);
+    }
+
+    @Override
+    public VerificationResult verifyResult(RequestMatch match, VerificationTimes times, VerifyDetail... details) {
+        requireRecording();
+        return VerificationResult.read(
+                transport.verify(port, VerifyBody.build(match, Optional.empty(), details)), times);
+    }
+
+    /**
+     * The engine counts {@code {0,0}} for a non-recording imposter, which reads as "no traffic"
+     * when the truth is "recording is off" — reject up front rather than return a silent always-zero.
+     */
+    private void requireRecording() {
         if (!definition().recordRequests()) {
             throw new InvalidDefinition("imposter :" + port + " does not record requests — add .record()");
-        }
-        // Reject an inject predicate up front: PredicateEvaluator.matches only reaches it once every
-        // preceding AND-clause has matched, so relying on the per-request filter below alone could
-        // silently skip the rejection for a request set where an earlier clause never matches.
-        PredicateEvaluator.requireNoInject(match.predicates());
-        List<RecordedRequest> all = recorded();
-        int count = (int) all.stream().filter(r -> PredicateEvaluator.matches(r, match.predicates())).count();
-        if (!times.matches(count)) {
-            throw new VerificationException(port, name(), match, times, count, all);
         }
     }
 
     @Override
     public void verifyNoInteractions() {
-        if (!definition().recordRequests()) {
-            throw new InvalidDefinition("imposter :" + port + " does not record requests — add .record()");
-        }
+        requireRecording();
         List<RecordedRequest> all = recorded();
         if (!all.isEmpty()) {
             RequestMatch noPredicates = List::of;

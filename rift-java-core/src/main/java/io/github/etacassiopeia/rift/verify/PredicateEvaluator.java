@@ -71,34 +71,6 @@ public final class PredicateEvaluator {
         return count;
     }
 
-    /**
-     * Throws {@link InvalidDefinition} if {@code predicates} contain an {@code inject} anywhere,
-     * including nested under {@code and}/{@code or}/{@code not}.
-     *
-     * <p>Used to reject a {@code verify} call up front: {@link #matches} only reaches a given
-     * predicate once everything preceding it in an AND-list has already matched, so it cannot be
-     * relied on alone to surface an inject predicate that never gets reached against a particular
-     * (or empty) recorded-request set.
-     */
-    public static void requireNoInject(List<Predicate> predicates) {
-        for (Predicate predicate : predicates) {
-            requireNoInject(predicate.operation());
-        }
-    }
-
-    private static void requireNoInject(PredicateOperation op) {
-        if (op instanceof PredicateOperation.Inject) {
-            throw new InvalidDefinition("inject predicates cannot be verified client-side");
-        }
-        if (op instanceof PredicateOperation.Not not) {
-            requireNoInject(not.predicate().operation());
-        } else if (op instanceof PredicateOperation.Or or) {
-            or.predicates().forEach(p -> requireNoInject(p.operation()));
-        } else if (op instanceof PredicateOperation.And and) {
-            and.predicates().forEach(p -> requireNoInject(p.operation()));
-        }
-    }
-
     /** The first top-level predicate that fails to match, described as a diff-friendly {@link Failure}. */
     static Optional<Failure> firstFailure(RecordedRequest request, List<Predicate> predicates) {
         for (Predicate predicate : predicates) {

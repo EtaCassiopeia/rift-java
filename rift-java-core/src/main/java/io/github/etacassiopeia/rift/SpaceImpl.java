@@ -10,7 +10,9 @@ import io.github.etacassiopeia.rift.transport.StubAddress;
 import io.github.etacassiopeia.rift.verify.PredicateEvaluator;
 import io.github.etacassiopeia.rift.verify.RequestMatch;
 import io.github.etacassiopeia.rift.verify.VerificationException;
+import io.github.etacassiopeia.rift.verify.VerificationResult;
 import io.github.etacassiopeia.rift.verify.VerificationTimes;
+import io.github.etacassiopeia.rift.verify.VerifyDetail;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -73,14 +75,23 @@ final class SpaceImpl implements Space {
 
     @Override
     public void verify(RequestMatch match, VerificationTimes times) {
-        // Unlike Imposter.verify, a space is not itself an imposter definition, so there is no
-        // recordRequests() flag to check here — recording is configured on the owning imposter.
-        PredicateEvaluator.requireNoInject(match.predicates());
-        List<RecordedRequest> all = recorded();
-        int count = (int) all.stream().filter(r -> PredicateEvaluator.matches(r, match.predicates())).count();
-        if (!times.matches(count)) {
-            throw new VerificationException(port, Optional.empty(), match, times, count, all);
+        VerificationResult result = verifyResult(match, times, VerifyDetail.CLOSEST);
+        if (!result.satisfied()) {
+            throw new VerificationException(port, Optional.empty(), match, times, result);
         }
+    }
+
+    @Override
+    public VerificationResult verifyResult(RequestMatch match, VerifyDetail... details) {
+        return verifyResult(match, VerificationTimes.atLeast(1), details);
+    }
+
+    @Override
+    public VerificationResult verifyResult(RequestMatch match, VerificationTimes times, VerifyDetail... details) {
+        // Unlike Imposter.verifyResult, a space is not itself an imposter definition, so there is no
+        // recordRequests() flag to check here — recording is configured on the owning imposter.
+        return VerificationResult.read(
+                transport.verify(port, VerifyBody.build(match, Optional.of(flowId), details)), times);
     }
 
     @Override
