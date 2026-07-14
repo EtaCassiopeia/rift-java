@@ -273,7 +273,10 @@ public interface Imposter {
   StubRef addStub(StubSpec spec, int index);  // insert at position (0 = first, highest priority)
   StubRef addStubFirst(StubSpec spec);        // sugar for (spec, 0) — the overlay idiom (addStubFirst → ref.delete() reverts)
   StubRef addStub(JsonValue stub);            // escape hatch
+  StubRef addStub(JsonValue stub, int index); // escape hatch
+  StubRef addStubFirst(JsonValue stub);       // escape hatch
   void replaceStubs(List<StubSpec> specs);
+  void replaceStubs(JsonValue stubs);         // escape hatch; JsonArray (List<JsonValue> would erase to the line above)
   void replaceStubs(ScenarioSpec scenario);   // convenience: scenario → stub list
   StubRef stub(String id);                    // id-addressed handle; ImposterNotFound-style miss → EngineError
   List<Stub> stubs();
@@ -304,6 +307,7 @@ public interface StubRef {
   int index(); Optional<String> id();
   Stub definition();
   void replace(StubSpec spec); void delete();
+  void replace(JsonValue stub);               // escape hatch
 }
 
 public interface Scenarios {
@@ -318,6 +322,7 @@ public interface Scenarios {
 public interface Space {
   String flowId();
   StubRef addStub(StubSpec spec);
+  StubRef addStub(JsonValue stub);            // escape hatch
   List<Stub> stubs();
   List<RecordedRequest> recorded();
   List<RecordedRequest> recorded(RequestMatch match);

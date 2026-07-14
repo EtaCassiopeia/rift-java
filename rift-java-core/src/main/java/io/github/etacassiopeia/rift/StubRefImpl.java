@@ -46,7 +46,12 @@ final class StubRefImpl implements StubRef {
 
     @Override
     public void replace(StubSpec spec) {
-        transport.replaceStub(port, address, JsonValue.parse(spec.build().toJson()));
+        replace(JsonValue.parse(spec.build().toJson()));
+    }
+
+    @Override
+    public void replace(JsonValue stub) {
+        transport.replaceStub(port, address, stub);
     }
 
     @Override

@@ -75,7 +75,7 @@ final class ImposterImpl implements Imposter {
 
     @Override
     public StubRef addStub(StubSpec spec, int index) {
-        return addStubAt(JsonValue.parse(spec.build().toJson()), index);
+        return addStub(JsonValue.parse(spec.build().toJson()), index);
     }
 
     @Override
@@ -83,7 +83,8 @@ final class ImposterImpl implements Imposter {
         return addStub(spec, 0);
     }
 
-    private StubRef addStubAt(JsonValue stub, int index) {
+    @Override
+    public StubRef addStub(JsonValue stub, int index) {
         int size = definition().stubs().size();
         if (index < 0 || index > size) {
             throw new InvalidDefinition(
@@ -91,6 +92,11 @@ final class ImposterImpl implements Imposter {
         }
         transport.addStub(port, stub, index);
         return new StubRefImpl(port, transport, new StubAddress.ByIndex(index));
+    }
+
+    @Override
+    public StubRef addStubFirst(JsonValue stub) {
+        return addStub(stub, 0);
     }
 
     @Override
@@ -134,7 +140,15 @@ final class ImposterImpl implements Imposter {
 
     @Override
     public void replaceStubs(List<StubSpec> specs) {
-        JsonArray stubs = new JsonArray(specs.stream().map(s -> (JsonValue) JsonValue.parse(s.build().toJson())).toList());
+        replaceStubs(new JsonArray(specs.stream().map(s -> (JsonValue) JsonValue.parse(s.build().toJson())).toList()));
+    }
+
+    @Override
+    public void replaceStubs(JsonValue stubs) {
+        if (!(stubs instanceof JsonArray)) {
+            throw new InvalidDefinition("replaceStubs expects a JSON array of stubs for imposter :" + port
+                    + " — got " + (stubs == null ? "null" : stubs.getClass().getSimpleName()));
+        }
         transport.replaceStubs(port, stubs);
     }
 
