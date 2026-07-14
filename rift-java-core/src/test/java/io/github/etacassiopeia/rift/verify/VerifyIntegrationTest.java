@@ -15,21 +15,32 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Function;
 
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.equalTo;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.onGet;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.onPost;
 import static io.github.etacassiopeia.rift.verify.VerificationTimes.times;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
-/** End-to-end verification behavior over a fake admin server: match counting, near-miss diffs, scoping. */
+/**
+ * End-to-end verification over a fake admin server — the wiring {@code VerifyResultTest}'s fake
+ * transport cannot cover: that a {@code verify} really does POST {@code /imposters/{port}/verify}
+ * with the right body, and that the response envelope survives the real HTTP transport.
+ *
+ * <p>Verdicts come from the server here, because since #127 the engine — not this SDK — decides
+ * them. What is asserted is the body sent and the facade's handling of the reply.
+ */
 class VerifyIntegrationTest {
 
     private HttpServer server;
     private final Map<String, String> routes = new ConcurrentHashMap<>(); // "METHOD /path" -> JSON body
+    private final List<String> verifyBodies = new CopyOnWriteArrayList<>();
+    private volatile Function<String, String> verifyResponder = body -> "{\"matched\":0,\"total\":0}";
     private Rift rift;
 
     private static final String RECORDING_IMPOSTER = "{\"port\":4545,\"protocol\":\"http\",\"recordRequests\":true,\"stubs\":[]}";
@@ -42,8 +53,16 @@ class VerifyIntegrationTest {
     void setUp() throws Exception {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
-            String key = exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath();
-            String body = routes.getOrDefault(key, "{}");
+            String path = exchange.getRequestURI().getPath();
+            String key = exchange.getRequestMethod() + " " + path;
+            String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            String body;
+            if (path.endsWith("/verify")) {
+                verifyBodies.add(requestBody);
+                body = verifyResponder.apply(requestBody);
+            } else {
+                body = routes.getOrDefault(key, "{}");
+            }
             byte[] out = body.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, out.length);
             try (var os = exchange.getResponseBody()) {
@@ -71,21 +90,40 @@ class VerifyIntegrationTest {
 
     @Test
     void verifyPassesWhenCountMatches() {
+        verifyResponder = body -> "{\"matched\":1,\"total\":3}";
         assertDoesNotThrow(() -> recordingImposter().verify(onGet("/api/users/2"), times(1)));
         assertDoesNotThrow(() -> recordingImposter().verify(onGet("/health")));  // default atLeastOnce
     }
 
     @Test
-    void verifyFailsWithRankedNearMissDiff() {
+    void verifySendsPredicatesAndAsksForClosestOverHttp() {
+        verifyResponder = body -> "{\"matched\":1,\"total\":3}";
+        recordingImposter().verify(onGet("/api/users/2"), times(1));
+
+        assertEquals(1, verifyBodies.size(), "verify is one POST to /imposters/{port}/verify");
+        String sent = verifyBodies.get(0);
+        assertTrue(sent.contains("/api/users/2"), "the predicates go over the wire: " + sent);
+        assertTrue(sent.contains("\"includeClosest\":true"), "verify asks for the diff up front: " + sent);
+        assertFalse(sent.contains("\"includeRequests\""), "verify does not ship the journal: " + sent);
+    }
+
+    @Test
+    void verifyFailsWithEngineClosestMissDiff() {
+        // The engine picks and explains the near-miss now; the facade renders what it is given.
+        verifyResponder = body -> "{\"matched\":0,\"total\":3,\"closest\":{"
+                + "\"request\":{\"method\":\"GET\",\"path\":\"/api/users/2\"},"
+                + "\"failedPredicates\":[{\"predicate\":{\"equals\":{\"path\":\"/api/users/1\"}},"
+                + "\"actual\":{\"path\":\"/api/users/2\"}}]}}";
+
         VerificationException ex = assertThrows(VerificationException.class,
                 () -> recordingImposter().verify(onGet("/api/users/1"), times(1)));
+
         String msg = ex.getMessage();
         assertTrue(msg.contains("Verification failed"), msg);
         assertTrue(msg.contains("but was 0"), msg);
-        assertTrue(msg.toLowerCase().contains("closest match"), msg);
-        // the closest near-miss (same method GET, path differs) names the failing path clause
-        assertTrue(msg.contains("/api/users/2"), msg);
-        assertTrue(msg.contains("expected") && msg.contains("got"), msg);
+        assertTrue(msg.contains("/api/users/2"), "the engine's closest request is rendered: " + msg);
+        assertTrue(msg.contains("/api/users/1"), "the failed clause is rendered: " + msg);
+        assertEquals(0, ex.result().orElseThrow().matched(), "the structured verdict survives the HTTP transport");
     }
 
     @Test
@@ -113,8 +151,12 @@ class VerifyIntegrationTest {
 
     @Test
     void spaceScopedVerifyIsIsolated() {
-        routes.put("GET /imposters/4545/spaces/flow-A/recorded", "{\"requests\":[{\"method\":\"GET\",\"path\":\"/only-in-A\"}]}");
-        routes.put("GET /imposters/4545/spaces/flow-B/recorded", "{\"requests\":[]}");
+        // A space scopes by flowId in the verify body, not by a distinct route — so the server
+        // answering per flowId is exactly what proves the scoping reached the wire.
+        verifyResponder = body -> body.contains("\"flowId\":\"flow-A\"")
+                ? "{\"matched\":1,\"total\":1}"
+                : "{\"matched\":0,\"total\":0}";
+
         assertDoesNotThrow(() -> recordingImposter().space("flow-A").verify(onGet("/only-in-A"), times(1)));
         assertThrows(VerificationException.class,
                 () -> recordingImposter().space("flow-B").verify(onGet("/only-in-A"), times(1)));
@@ -123,27 +165,14 @@ class VerifyIntegrationTest {
     @Test
     void verifyWithoutTimesFailsWhenZeroMatches() {
         // verify(match) with no times == atLeastOnce → fails when nothing matched
+        verifyResponder = body -> "{\"matched\":0,\"total\":3}";
         assertThrows(VerificationException.class, () -> recordingImposter().verify(onGet("/never-called")));
     }
 
     @Test
-    void nearMissRankingPutsFewerSatisfiedClausesLast() {
-        routes.put("GET /imposters/8000", "{\"port\":8000,\"protocol\":\"http\",\"recordRequests\":true,\"stubs\":[]}");
-        // match = 2 predicates: equals{method:GET,path:/x} and equals{headers:{H:v}}
-        routes.put("GET /imposters/8000/savedRequests", "{\"requests\":["
-                + "{\"method\":\"GET\",\"path\":\"/x\",\"headers\":{\"H\":\"wrong\"}},"    // 1 clause satisfied
-                + "{\"method\":\"POST\",\"path\":\"/y\",\"headers\":{\"H\":\"wrong\"}}]}"); // 0 clauses satisfied
-        VerificationException ex = assertThrows(VerificationException.class,
-                () -> rift.imposter(8000).orElseThrow().verify(onGet("/x").withHeader("H", equalTo("v")), times(1)));
-        String msg = ex.getMessage();
-        int posGetX = msg.indexOf("/x");
-        int posPostY = msg.indexOf("/y");
-        assertTrue(posGetX >= 0 && posPostY >= 0 && posGetX < posPostY,
-                "the 1-clause near-miss (GET /x) must be ranked before the 0-clause one (POST /y):\n" + msg);
-    }
-
-    @Test
-    void nearMissDiffCapsAtTenLinesWithRemainderNote() {
+    void verifyNoInteractionsDiffCapsAtTenLinesWithRemainderNote() {
+        // verifyNoInteractions asserts emptiness rather than a predicate match, so it keeps listing
+        // the journal client-side — the one caller left for the capped, client-rendered diff.
         StringBuilder reqs = new StringBuilder("{\"requests\":[");
         for (int i = 0; i < 12; i++) {
             reqs.append(i == 0 ? "" : ",").append("{\"method\":\"GET\",\"path\":\"/miss/").append(i).append("\"}");
@@ -151,9 +180,13 @@ class VerifyIntegrationTest {
         reqs.append("]}");
         routes.put("GET /imposters/8100", "{\"port\":8100,\"protocol\":\"http\",\"recordRequests\":true,\"stubs\":[]}");
         routes.put("GET /imposters/8100/savedRequests", reqs.toString());
+
         VerificationException ex = assertThrows(VerificationException.class,
-                () -> rift.imposter(8100).orElseThrow().verify(onGet("/target"), times(1)));
-        assertTrue(ex.getMessage().toLowerCase().contains("more"), "12 near-misses must be capped with a '… and k more' note:\n" + ex.getMessage());
+                () -> rift.imposter(8100).orElseThrow().verifyNoInteractions());
+
+        assertTrue(ex.getMessage().toLowerCase().contains("more"),
+                "12 recorded requests must be capped with a '… and k more' note:\n" + ex.getMessage());
+        assertTrue(ex.result().isEmpty(), "verifyNoInteractions has no engine verdict to carry");
     }
 
     @Test
@@ -166,8 +199,15 @@ class VerifyIntegrationTest {
     }
 
     @Test
-    void injectPredicateInVerifyThrowsInvalidDefinition() {
-        assertThrows(InvalidDefinition.class,
-                () -> recordingImposter().verify(onPost("/x").withPredicateInject("function(){return true;}")));
+    void injectPredicateIsSentToTheEngineRatherThanRejected() {
+        // Behavior delta of #127: an inject predicate used to be rejected client-side because this
+        // SDK could not evaluate it. The engine can, so it is now forwarded and the engine decides.
+        verifyResponder = body -> "{\"matched\":1,\"total\":1}";
+
+        assertDoesNotThrow(() -> recordingImposter()
+                .verify(onPost("/x").withPredicateInject("function(){return true;}")));
+
+        assertTrue(verifyBodies.get(0).contains("inject"),
+                "the inject predicate is forwarded verbatim: " + verifyBodies.get(0));
     }
 }

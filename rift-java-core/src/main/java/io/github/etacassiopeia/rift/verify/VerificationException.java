@@ -18,14 +18,35 @@ import java.util.Optional;
  * {@code io.github.etacassiopeia.rift.error} hierarchy) so test runners report it as a failed
  * assertion, matching WireMock's {@code VerificationException}.
  *
- * <p>The message ranks the recorded requests closest-match-first (most satisfied top-level
- * predicate clauses, ties broken by recency) and shows, for each, the first predicate clause it
- * failed — a near-miss diff in the style of WireMock's verification failures.
+ * <p>The message shows a near-miss diff in the style of WireMock's verification failures. When the
+ * failure came from {@code verify}, {@link #result()} carries the engine's structured verdict so a
+ * downstream reporter can render its own diff from values instead of scraping this message.
  */
 public final class VerificationException extends AssertionError {
 
+    private static final long serialVersionUID = 1L;
+
     private static final int MAX_DIFF_LINES = 10;
 
+    // transient: VerificationResult transitively holds JsonValue, which is not Serializable — a test
+    // runner serializing this exception across a worker boundary would otherwise fail outright.
+    private final transient Optional<VerificationResult> result;
+
+    /** Raised by {@code verify}: the engine's structured verdict, including its closest non-match. */
+    public VerificationException(
+            int port,
+            Optional<String> name,
+            RequestMatch match,
+            VerificationTimes times,
+            VerificationResult result) {
+        super(buildMessage(port, name, match, times, result));
+        this.result = Optional.of(result);
+    }
+
+    /**
+     * Raised by {@code verifyNoInteractions}, which asserts emptiness rather than a predicate match
+     * and so has no engine verdict to carry — the diff is ranked client-side from {@code recorded}.
+     */
     public VerificationException(
             int port,
             Optional<String> name,
@@ -34,6 +55,51 @@ public final class VerificationException extends AssertionError {
             int actualCount,
             List<RecordedRequest> recorded) {
         super(buildMessage(port, name, match, times, actualCount, recorded));
+        this.result = Optional.empty();
+    }
+
+    /**
+     * The engine's structured verdict, or empty when this came from {@code verifyNoInteractions}
+     * (or when this exception was deserialized — {@link #result} does not survive the wire).
+     */
+    public Optional<VerificationResult> result() {
+        return result == null ? Optional.empty() : result;
+    }
+
+    private static String buildMessage(
+            int port,
+            Optional<String> name,
+            RequestMatch match,
+            VerificationTimes times,
+            VerificationResult result) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(header(port, name, match.predicates(), times, result.matched()));
+        if (result.total() == 0) {
+            sb.append("0 recorded requests.");
+            return sb.toString();
+        }
+        sb.append(result.total()).append(" recorded requests.");
+        result.closest().ifPresent(closest -> {
+            sb.append("\nClosest miss:\n  ✗ ").append(requestLine(closest.request()));
+            for (FailedPredicate failed : closest.failedPredicates()) {
+                sb.append("\n      failed ").append(failed.predicate().toJson())
+                        .append("  —  actual ").append(failed.actual().toJson());
+            }
+        });
+        return sb.toString();
+    }
+
+    private static String header(
+            int port, Optional<String> name, List<Predicate> predicates, VerificationTimes times, int actualCount) {
+        return "Verification failed for imposter :" + port + " (\"" + name.orElse("") + "\")\n"
+                + "Expected: " + requestSummary(predicates) + "  —  " + times.describe()
+                + ", but was " + actualCount + ".\n\n";
+    }
+
+    private static String requestLine(RecordedRequest request) {
+        String method = request.method().isEmpty() ? "?" : request.method();
+        String path = request.path().isEmpty() ? "/" : request.path();
+        return method + " " + path;
     }
 
     private static String buildMessage(
@@ -44,12 +110,7 @@ public final class VerificationException extends AssertionError {
             int actualCount,
             List<RecordedRequest> recorded) {
         List<Predicate> predicates = match.predicates();
-        StringBuilder sb = new StringBuilder();
-        sb.append("Verification failed for imposter :").append(port)
-                .append(" (\"").append(name.orElse("")).append("\")\n");
-        sb.append("Expected: ").append(requestSummary(predicates))
-                .append("  —  ").append(times.describe())
-                .append(", but was ").append(actualCount).append(".\n\n");
+        StringBuilder sb = new StringBuilder(header(port, name, predicates, times, actualCount));
 
         if (recorded.isEmpty()) {
             sb.append("0 recorded requests.");
