@@ -7,7 +7,6 @@ import io.github.etacassiopeia.rift.dsl.StubSpec;
 import io.github.etacassiopeia.rift.error.InvalidDefinition;
 import io.github.etacassiopeia.rift.error.RiftException;
 import io.github.etacassiopeia.rift.json.JsonArray;
-import io.github.etacassiopeia.rift.json.JsonObject;
 import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.FlowStateSupport;
 import io.github.etacassiopeia.rift.model.ImposterDefinition;
@@ -32,6 +31,7 @@ final class ImposterImpl implements Imposter {
 
     private static final System.Logger LOG = System.getLogger(ImposterImpl.class.getName());
     private static final MatchClause[] NO_FILTERS = {};
+    private static final String SAVED_REQUESTS = "savedRequests";
 
     private final int port;
     private final RiftTransport transport;
@@ -168,7 +168,7 @@ final class ImposterImpl implements Imposter {
 
     @Override
     public List<RecordedRequest> recorded() {
-        return readRequests(transport.recorded(port));
+        return RecordedRequests.readAll(transport.recorded(port), SAVED_REQUESTS);
     }
 
     @Override
@@ -192,21 +192,8 @@ final class ImposterImpl implements Imposter {
     }
 
     private static RecordedPage page(RiftTransport.RecordedSlice slice) {
-        return new RecordedPage(readRequests(slice.requests()), slice.nextIndex(), slice.truncated());
-    }
-
-    private static List<RecordedRequest> readRequests(JsonValue result) {
-        List<RecordedRequest> out = new ArrayList<>();
-        if (result instanceof JsonArray arr) {
-            for (JsonValue v : arr.items()) {
-                out.add(RecordedRequest.read(v));
-            }
-        } else if (result instanceof JsonObject obj && obj.get("requests") instanceof JsonArray arr) {
-            for (JsonValue v : arr.items()) {
-                out.add(RecordedRequest.read(v));
-            }
-        }
-        return List.copyOf(out);
+        return new RecordedPage(RecordedRequests.readAll(slice.requests(), SAVED_REQUESTS),
+                slice.nextIndex(), slice.truncated());
     }
 
     @Override
