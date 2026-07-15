@@ -21,6 +21,7 @@ import static io.github.etacassiopeia.rift.dsl.RiftDsl.header;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.matches;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.method;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.not;
+import static io.github.etacassiopeia.rift.dsl.RiftDsl.notExists;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.onRequest;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.or;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.path;
@@ -71,6 +72,30 @@ class PredicateEvaluatorTest {
         assertTrue(check(r, query("page", exists()).build()));
         assertTrue(check(r, header("Accept", exists()).build()));
         assertFalse(check(r, query("missing", exists()).build()));
+    }
+
+    @Test
+    void existsOnScalarFields() {
+        RecordedRequest present = req("POST", "/x", "hello", Map.of(), Map.of());
+        assertTrue(check(present, method(exists()).build()));
+        assertTrue(check(present, path(exists()).build()));
+        assertTrue(check(present, body(exists()).build()));
+
+        // an empty scalar reads as absent, and notExists() is the inverse assertion — both directions
+        // matter, since a flipped comparison would still satisfy the positive case alone.
+        RecordedRequest emptyBody = req("POST", "/x", "", Map.of(), Map.of());
+        assertFalse(check(emptyBody, body(exists()).build()));
+        assertTrue(check(emptyBody, body(notExists()).build()));
+        assertFalse(check(present, body(notExists()).build()));
+    }
+
+    @Test
+    void existsWithSelectorOverBody() {
+        RecordedRequest r = req("POST", "/users", "{\"name\":\"Alice\",\"empty\":\"\"}", Map.of(), Map.of());
+        assertTrue(check(r, body(exists()).jsonPath("$.name").build()));
+        assertFalse(check(r, body(exists()).jsonPath("$.missing").build()));
+        assertFalse(check(r, body(exists()).jsonPath("$.empty").build()));
+        assertTrue(check(r, body(notExists()).jsonPath("$.missing").build()));
     }
 
     @Test

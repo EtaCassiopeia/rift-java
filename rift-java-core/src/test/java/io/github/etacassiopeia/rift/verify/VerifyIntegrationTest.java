@@ -170,9 +170,9 @@ class VerifyIntegrationTest {
     }
 
     @Test
-    void verifyNoInteractionsDiffCapsAtTenLinesWithRemainderNote() {
+    void verifyNoInteractionsListsRecordedRequestsMostRecentFirstCappedAtTen() {
         // verifyNoInteractions asserts emptiness rather than a predicate match, so it keeps listing
-        // the journal client-side — the one caller left for the capped, client-rendered diff.
+        // the journal client-side — the one caller left for the capped, client-rendered list.
         StringBuilder reqs = new StringBuilder("{\"requests\":[");
         for (int i = 0; i < 12; i++) {
             reqs.append(i == 0 ? "" : ",").append("{\"method\":\"GET\",\"path\":\"/miss/").append(i).append("\"}");
@@ -183,9 +183,22 @@ class VerifyIntegrationTest {
 
         VerificationException ex = assertThrows(VerificationException.class,
                 () -> rift.imposter(8100).orElseThrow().verifyNoInteractions());
+        String message = ex.getMessage();
 
-        assertTrue(ex.getMessage().toLowerCase().contains("more"),
-                "12 recorded requests must be capped with a '… and k more' note:\n" + ex.getMessage());
+        // The header must describe what the list actually is. Nothing is ranked here (verifyNoInteractions
+        // has no predicates to rank against), so "closest match first" would be a claim the code cannot back.
+        assertTrue(message.contains("12 recorded requests, most recent first:"),
+                "the header must state the real ordering:\n" + message);
+        assertFalse(message.contains("closest match first"), "nothing is ranked:\n" + message);
+        // "(matches)" on a verification *failure* is self-contradictory, and was unreachable-by-design output.
+        assertFalse(message.contains("(matches)"), "a failed assertion must not claim its requests matched:\n" + message);
+
+        List<String> listed = message.lines().filter(line -> line.startsWith("  ✗ ")).toList();
+        assertEquals(10, listed.size(), "the list caps at MAX_DIFF_LINES:\n" + message);
+        assertEquals("  ✗ GET /miss/11", listed.get(0), "most recent first — /miss/11 was recorded last:\n" + message);
+        assertEquals("  ✗ GET /miss/2", listed.get(9), "the 10th line is the 10th-newest:\n" + message);
+        assertTrue(message.contains("… and 2 more"),
+                "12 recorded requests must be capped with a '… and k more' note:\n" + message);
         assertTrue(ex.result().isEmpty(), "verifyNoInteractions has no engine verdict to carry");
     }
 

@@ -34,8 +34,9 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
 /**
- * Client-side evaluation of Mountebank predicate semantics against a recorded request, used to
- * verify what an imposter actually received without round-tripping the comparison to the engine.
+ * Client-side evaluation of Mountebank predicate semantics against a recorded request. Verification
+ * itself is engine-authoritative (#127); what remains here backs {@code recorded(RequestMatch)}, the
+ * client-side convenience filter over an imposter's journal.
  *
  * <p>Uses {@code instanceof} chains rather than pattern-matching {@code switch} throughout: the
  * latter is still a preview feature at the Java 17 release level this module compiles against
@@ -54,35 +55,6 @@ public final class PredicateEvaluator {
         }
         return true;
     }
-
-    /** The count of top-level {@code predicates} that individually match {@code request}. */
-    static int satisfiedClauses(RecordedRequest request, List<Predicate> predicates) {
-        int count = 0;
-        for (Predicate predicate : predicates) {
-            try {
-                if (matchesOne(request, predicate)) {
-                    count++;
-                }
-            } catch (RuntimeException e) {
-                // Ranking a near-miss for the failure message must never throw a *different* error than
-                // verify() itself would; a clause that can't be evaluated just doesn't count toward rank.
-            }
-        }
-        return count;
-    }
-
-    /** The first top-level predicate that fails to match, described as a diff-friendly {@link Failure}. */
-    static Optional<Failure> firstFailure(RecordedRequest request, List<Predicate> predicates) {
-        for (Predicate predicate : predicates) {
-            if (!matchesOne(request, predicate)) {
-                return Optional.of(describeFailure(request, predicate));
-            }
-        }
-        return Optional.empty();
-    }
-
-    /** One failing clause: the field it applies to, the operation, and the expected/actual values. */
-    record Failure(String field, String op, String expected, String actual) {}
 
     private static boolean matchesOne(RecordedRequest request, Predicate predicate) {
         PredicateOperation op = predicate.operation();
@@ -110,10 +82,10 @@ public final class PredicateEvaluator {
         String opTag = op.tag();
         if (params.selector().isPresent()) {
             JsonValue expected = fields.isEmpty() ? JsonBool.TRUE : fields.values().iterator().next();
-            return evalSelector(request, params, opTag, params.selector().get(), expected).matched();
+            return evalSelector(request, params, opTag, params.selector().get(), expected);
         }
         for (var entry : fields.entrySet()) {
-            if (!evalField(request, params, opTag, entry.getKey(), entry.getValue()).matched()) {
+            if (!evalField(request, params, opTag, entry.getKey(), entry.getValue())) {
                 return false;
             }
         }
@@ -131,9 +103,7 @@ public final class PredicateEvaluator {
         throw new IllegalStateException("not a field-comparison predicate operation: " + op);
     }
 
-    private record FieldEval(boolean matched, String actualDisplay) {}
-
-    private static FieldEval evalField(
+    private static boolean evalField(
             RecordedRequest request, PredicateParameters params, String opTag, String fieldName, JsonValue expected) {
         if ("method".equals(fieldName)) {
             return evalScalar(request.method(), expected, params, opTag);
@@ -151,45 +121,42 @@ public final class PredicateEvaluator {
             return evalMulti(request.headers(), expected, params, opTag);
         }
         // an unrecognized field name never matches (rather than silently no-op-passing)
-        return new FieldEval(false, "");
+        return false;
     }
 
-    private static FieldEval evalScalar(String actual, JsonValue expected, PredicateParameters params, String opTag) {
-        String display = actual == null ? "" : actual;
+    private static boolean evalScalar(String actual, JsonValue expected, PredicateParameters params, String opTag) {
         if ("exists".equals(opTag)) {
             boolean wantExists = isTrue(expected);
             boolean present = actual != null && !actual.isEmpty();
-            return new FieldEval(wantExists == present, display);
+            return wantExists == present;
         }
-        return new FieldEval(matchesOp(opTag, actual == null ? "" : actual, expected, params), display);
+        return matchesOp(opTag, actual == null ? "" : actual, expected, params);
     }
 
-    private static FieldEval evalMulti(
+    private static boolean evalMulti(
             Map<String, List<String>> multiMap, JsonValue expectedField, PredicateParameters params, String opTag) {
         if (!(expectedField instanceof JsonObject nested)) {
-            return new FieldEval(false, "");
+            return false;
         }
         boolean keyCaseSensitive = params.keyCaseSensitive().orElse(false);
-        String lastActualDisplay = "";
         for (var entry : nested.fields().entrySet()) {
             List<String> actualValues = lookupMulti(multiMap, entry.getKey(), keyCaseSensitive);
-            lastActualDisplay = actualValues == null || actualValues.isEmpty() ? "" : String.join(", ", actualValues);
             if ("exists".equals(opTag)) {
                 boolean wantExists = isTrue(entry.getValue());
                 boolean present = actualValues != null && actualValues.stream().anyMatch(v -> !v.isEmpty());
                 if (wantExists != present) {
-                    return new FieldEval(false, lastActualDisplay);
+                    return false;
                 }
             } else {
                 JsonValue expectedValue = entry.getValue();
                 boolean any = actualValues != null
                         && actualValues.stream().anyMatch(v -> matchesOp(opTag, v, expectedValue, params));
                 if (!any) {
-                    return new FieldEval(false, lastActualDisplay);
+                    return false;
                 }
             }
         }
-        return new FieldEval(true, lastActualDisplay);
+        return true;
     }
 
     private static List<String> lookupMulti(Map<String, List<String>> map, String name, boolean keyCaseSensitive) {
@@ -287,17 +254,15 @@ public final class PredicateEvaluator {
     // Structured selectors (JsonPath / XPath) over the request body
     // ------------------------------------------------------------------
 
-    private static FieldEval evalSelector(
+    private static boolean evalSelector(
             RecordedRequest request, PredicateParameters params, String opTag, PredicateSelector selector, JsonValue expected) {
         List<String> extracted = extractValues(request, selector);
-        String display = String.join(", ", extracted);
         if ("exists".equals(opTag)) {
             boolean wantExists = isTrue(expected);
             boolean present = extracted.stream().anyMatch(v -> !v.isEmpty());
-            return new FieldEval(wantExists == present, display);
+            return wantExists == present;
         }
-        boolean any = extracted.stream().anyMatch(v -> matchesOp(opTag, v, expected, params));
-        return new FieldEval(any, display);
+        return extracted.stream().anyMatch(v -> matchesOp(opTag, v, expected, params));
     }
 
     private static List<String> extractValues(RecordedRequest request, PredicateSelector selector) {
@@ -476,74 +441,5 @@ public final class PredicateEvaluator {
             }
             return out.iterator();
         }
-    }
-
-    // ------------------------------------------------------------------
-    // Diff description for VerificationException
-    // ------------------------------------------------------------------
-
-    private static Failure describeFailure(RecordedRequest request, Predicate predicate) {
-        PredicateOperation op = predicate.operation();
-        if (op instanceof PredicateOperation.Not not) {
-            // the negated predicate matched (that's why "not" failed); describe that clause
-            Failure inner = describeFailureAssumingMatch(request, not.predicate());
-            return new Failure(inner.field(), "not " + inner.op(), inner.expected(), inner.actual());
-        }
-        if (op instanceof PredicateOperation.And and) {
-            for (Predicate p : and.predicates()) {
-                if (!matches(request, List.of(p))) {
-                    return describeFailure(request, p);
-                }
-            }
-            return new Failure("and", "and", "all clauses to match", "not all matched");
-        }
-        if (op instanceof PredicateOperation.Or or) {
-            if (or.predicates().isEmpty()) {
-                return new Failure("or", "or", "any clause to match", "no clauses");
-            }
-            return describeFailure(request, or.predicates().get(0));
-        }
-        if (op instanceof PredicateOperation.Inject) {
-            throw new InvalidDefinition("inject predicates cannot be verified client-side");
-        }
-        return describeFieldFailure(request, predicate.parameters(), op);
-    }
-
-    /** Describes a predicate that is known to currently match (used to explain a failing {@code not}). */
-    private static Failure describeFailureAssumingMatch(RecordedRequest request, Predicate predicate) {
-        PredicateOperation op = predicate.operation();
-        if (op instanceof PredicateOperation.Not || op instanceof PredicateOperation.And || op instanceof PredicateOperation.Or) {
-            return new Failure("not", op.tag(), "no match", "matched");
-        }
-        if (op instanceof PredicateOperation.Inject) {
-            throw new InvalidDefinition("inject predicates cannot be verified client-side");
-        }
-        return describeFieldFailure(request, predicate.parameters(), op);
-    }
-
-    private static Failure describeFieldFailure(RecordedRequest request, PredicateParameters params, PredicateOperation op) {
-        Map<String, JsonValue> fields = fieldsOf(op);
-        String opTag = op.tag();
-        if (params.selector().isPresent()) {
-            JsonValue expected = fields.isEmpty() ? JsonBool.TRUE : fields.values().iterator().next();
-            PredicateSelector selector = params.selector().get();
-            FieldEval eval = evalSelector(request, params, opTag, selector, expected);
-            String selectorText = selector instanceof PredicateSelector.JsonPath jp ? jp.selector()
-                    : ((PredicateSelector.XPath) selector).selector();
-            return new Failure("body[" + selectorText + "]", opTag, jsonToCompareString(expected), eval.actualDisplay());
-        }
-        for (var entry : fields.entrySet()) {
-            FieldEval eval = evalField(request, params, opTag, entry.getKey(), entry.getValue());
-            if (!eval.matched()) {
-                String field = entry.getKey();
-                JsonValue expectedValue = entry.getValue();
-                String expectedDisplay = "query".equals(field) || "headers".equals(field)
-                        ? entry.getValue().toJson()
-                        : jsonToCompareString(expectedValue);
-                return new Failure(field, opTag, expectedDisplay, eval.actualDisplay());
-            }
-        }
-        // every field matched individually — should not happen since the caller already checked this predicate failed
-        return new Failure(opTag, opTag, "?", "?");
     }
 }

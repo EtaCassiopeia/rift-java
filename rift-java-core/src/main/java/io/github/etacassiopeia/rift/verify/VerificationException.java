@@ -6,8 +6,6 @@ import io.github.etacassiopeia.rift.json.JsonValue;
 import io.github.etacassiopeia.rift.model.Predicate;
 import io.github.etacassiopeia.rift.model.PredicateOperation;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -45,7 +43,7 @@ public final class VerificationException extends AssertionError {
 
     /**
      * Raised by {@code verifyNoInteractions}, which asserts emptiness rather than a predicate match
-     * and so has no engine verdict to carry — the diff is ranked client-side from {@code recorded}.
+     * and so has no engine verdict to carry — {@code recorded} is listed most recent first.
      */
     public VerificationException(
             int port,
@@ -117,43 +115,18 @@ public final class VerificationException extends AssertionError {
             return sb.toString();
         }
 
-        List<Ranked> ranked = rank(recorded, predicates);
-        sb.append(recorded.size()).append(" recorded requests, closest match first:\n");
-        int shown = Math.min(MAX_DIFF_LINES, ranked.size());
+        sb.append(recorded.size()).append(" recorded requests, most recent first:\n");
+        int shown = Math.min(MAX_DIFF_LINES, recorded.size());
         for (int i = 0; i < shown; i++) {
-            sb.append("  ").append(diffLine(ranked.get(i).request(), predicates));
+            sb.append("  ✗ ").append(requestLine(recorded.get(recorded.size() - 1 - i)));
             if (i < shown - 1) {
                 sb.append("\n");
             }
         }
-        if (ranked.size() > shown) {
-            sb.append("\n  … and ").append(ranked.size() - shown).append(" more");
+        if (recorded.size() > shown) {
+            sb.append("\n  … and ").append(recorded.size() - shown).append(" more");
         }
         return sb.toString();
-    }
-
-    private record Ranked(int index, RecordedRequest request, int satisfied) {}
-
-    private static List<Ranked> rank(List<RecordedRequest> recorded, List<Predicate> predicates) {
-        List<Ranked> ranked = new ArrayList<>();
-        for (int i = 0; i < recorded.size(); i++) {
-            ranked.add(new Ranked(i, recorded.get(i), PredicateEvaluator.satisfiedClauses(recorded.get(i), predicates)));
-        }
-        ranked.sort(Comparator.comparingInt(Ranked::satisfied).reversed()
-                .thenComparing(Comparator.comparingInt(Ranked::index).reversed()));
-        return ranked;
-    }
-
-    private static String diffLine(RecordedRequest request, List<Predicate> predicates) {
-        String method = request.method().isEmpty() ? "?" : request.method();
-        String path = request.path().isEmpty() ? "/" : request.path();
-        String header = "✗ " + method + " " + path;
-        Optional<PredicateEvaluator.Failure> failure = PredicateEvaluator.firstFailure(request, predicates);
-        if (failure.isEmpty()) {
-            return header + "    (matches)";
-        }
-        PredicateEvaluator.Failure f = failure.get();
-        return header + "    " + f.field() + ": expected \"" + f.expected() + "\" (" + f.op() + "), got \"" + f.actual() + "\"";
     }
 
     /** The expected method+path from a simple {@code equals} predicate, if determinable; else a generic label. */
