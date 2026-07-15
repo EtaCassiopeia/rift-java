@@ -31,6 +31,7 @@ import java.util.OptionalLong;
 final class ImposterImpl implements Imposter {
 
     private static final System.Logger LOG = System.getLogger(ImposterImpl.class.getName());
+    private static final MatchClause[] NO_FILTERS = {};
 
     private final int port;
     private final RiftTransport transport;
@@ -172,12 +173,22 @@ final class ImposterImpl implements Imposter {
 
     @Override
     public RecordedPage recordedPage() {
-        return page(transport.recordedSince(port, OptionalLong.empty()));
+        return recordedPage(NO_FILTERS);
+    }
+
+    @Override
+    public RecordedPage recordedPage(MatchClause... filters) {
+        return page(transport.recordedSince(port, OptionalLong.empty(), List.of(filters)));
     }
 
     @Override
     public RecordedPage recordedSince(long cursor) {
-        return page(transport.recordedSince(port, OptionalLong.of(cursor)));
+        return recordedSince(cursor, NO_FILTERS);
+    }
+
+    @Override
+    public RecordedPage recordedSince(long cursor, MatchClause... filters) {
+        return page(transport.recordedSince(port, OptionalLong.of(cursor), List.of(filters)));
     }
 
     private static RecordedPage page(RiftTransport.RecordedSlice slice) {
@@ -206,6 +217,11 @@ final class ImposterImpl implements Imposter {
     @Override
     public void clearRecorded() {
         transport.clearRecorded(port);
+    }
+
+    @Override
+    public void clearRecorded(MatchClause... filters) {
+        transport.clearRecorded(port, List.of(filters));
     }
 
     @Override

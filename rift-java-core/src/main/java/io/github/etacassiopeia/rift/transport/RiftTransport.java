@@ -1,8 +1,10 @@
 package io.github.etacassiopeia.rift.transport;
 
+import io.github.etacassiopeia.rift.MatchClause;
 import io.github.etacassiopeia.rift.json.JsonValue;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -74,10 +76,15 @@ public interface RiftTransport extends AutoCloseable {
     record RecordedSlice(JsonValue requests, OptionalLong nextIndex, boolean truncated) {}
 
     /**
-     * Reads {@code savedRequests} with an optional journal cursor (rift#603): entries strictly newer
-     * than {@code since}, or everything retained when {@code since} is empty. The two are different
-     * questions, not one with a default — a baseline read never reports truncation, while
-     * {@code since=0} ("replay everything") does once anything has been evicted.
+     * Reads {@code savedRequests} with an optional journal cursor (rift#603) and optional
+     * server-side {@code match=} clauses: entries strictly newer than {@code since}, or everything
+     * retained when {@code since} is empty, keeping only those every clause accepts. The engine cuts
+     * by cursor first and filters second, and advances the cursor past entries the filter rejected
+     * so a filtered tail never re-scans them.
+     *
+     * <p>Baseline and {@code since} are different questions, not one with a default — a baseline read
+     * never reports truncation, while {@code since=0} ("replay everything") does once anything has
+     * been evicted.
      *
      * <p>The default serves the full list and reports no cursor, which is exactly what an engine
      * without cursor support does over HTTP. It is the honest answer for any transport that cannot
@@ -85,9 +92,41 @@ public interface RiftTransport extends AutoCloseable {
      * and rift#603 expects consumers to poll. Synthesizing an index from an array offset here would
      * re-introduce the skip-entries bug the cursor exists to remove, so implementations that cannot
      * obtain a real cursor must leave {@code nextIndex} empty rather than invent one.
+     *
+     * <p>Clauses get no such fallback: the default <b>refuses</b> them rather than serving an
+     * unfiltered list. Widening a filter silently would hand back the very entries the caller asked
+     * to exclude, which for correlated scenarios is cross-contamination — the failure the engine's
+     * own 400-on-malformed-clause rule exists to prevent. Nor can it be emulated client-side, since
+     * a recorded entry carries no resolved flow id.
+     *
+     * @throws UnsupportedOperationException if {@code match} is non-empty and this transport cannot
+     *                                       express server-side filtering
      */
-    default RecordedSlice recordedSince(int port, OptionalLong since) {
+    default RecordedSlice recordedSince(int port, OptionalLong since, List<MatchClause> match) {
+        if (!match.isEmpty()) {
+            throw new UnsupportedOperationException(
+                    "this transport cannot express server-side match= filters, and must not answer a "
+                            + "filtered read with an unfiltered list");
+        }
         return new RecordedSlice(recorded(port), OptionalLong.empty(), false);
+    }
+
+    /**
+     * Clears only the recorded requests every clause accepts, leaving the rest.
+     *
+     * <p>The default refuses a scoped clear rather than falling back to {@link #clearRecorded(int)}:
+     * here the silent-widening failure is destructive, deleting exactly the entries the caller was
+     * trying to keep.
+     *
+     * @throws UnsupportedOperationException if {@code match} is non-empty and this transport cannot
+     *                                       express server-side filtering
+     */
+    default void clearRecorded(int port, List<MatchClause> match) {
+        if (!match.isEmpty()) {
+            throw new UnsupportedOperationException(
+                    "this transport cannot express a scoped clear, and must not widen it to clear everything");
+        }
+        clearRecorded(port);
     }
 
     void clearRecorded(int port);
