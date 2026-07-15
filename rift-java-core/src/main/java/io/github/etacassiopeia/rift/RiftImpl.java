@@ -240,6 +240,12 @@ final class RiftImpl implements Rift {
         transport.replaceAllImposters(doc);
     }
 
+
+    @Override
+    public EventStream events(EventStreamOptions options) {
+        return transport.events(options);
+    }
+
     @Override
     public EngineInfo info() {
         return EngineInfo.read(transport.buildInfo());

@@ -125,6 +125,7 @@ public interface Rift extends AutoCloseable {
   void replaceAll(List<ImposterDefinition> imposters);  // atomic PUT /imposters
 
   // -- engine --
+  EventStream events(EventStreamOptions options);   // push tail over the engine's SSE stream (§8.3)
   EngineInfo info();                         // {version, commit, features} — GET /config | rift_build_info
   URI adminUri();                            // remote/spawn: the admin endpoint; embedded: lazily
                                              // starts rift_serve_admin on first call
@@ -639,6 +640,72 @@ rather than widening it: answering unfiltered would return the entries the calle
 widened clear would delete the ones they kept. Neither is expressible client-side anyway — a
 recorded entry carries no resolved flow id.
 
+### 8.3 `EventStream` — the push tail
+
+```java
+EventStream events(EventStreamOptions options);          // on Rift; GET /events
+
+public sealed interface RiftEvent {
+    OptionalLong seq();                                  // the SSE id:; a gap means reconcile
+    record Hello(String engineVersion, long seqAtConnect, List<String> types, OptionalInt port)
+    record RequestRecorded(OptionalLong seq, int port, OptionalLong index, Optional<String> flowId,
+                           RecordedRequest request)
+    record ImposterChanged(OptionalLong seq, Action action, OptionalInt port)   // ALL_DELETED has no port
+    record Lagged(long missed)                           // non-fatal: your view has a hole
+}
+
+public interface EventStream extends AutoCloseable, Iterable<RiftEvent> { }
+```
+
+Pull, not push-to-a-callback: `hasNext()` blocks. rift-scala's bridge wraps one blocking connector
+(its D4), and both its backends build a stream from a blocking iterator in a line
+(`ZStream.fromIteratorZIO`, `Stream.fromBlockingIterator`) — so D6's promise that the SSE upgrade
+leaves their stream types unchanged holds. A callback API would force every wrapper to rebuild a
+queue-and-thread to un-invert it.
+
+Deliberately **not** `Stream<RecordedRequest>`: lifecycle changes and `Lagged` are not recorded
+requests, and flattening them away drops exactly the signals a tail needs to stay correct.
+
+**How iteration ends** — three causes, three meanings:
+
+| Cause | Behaviour |
+|---|---|
+| `close()` | `hasNext()` returns `false` — a graceful end |
+| Engine disconnects, or goes silent past `idleTimeout` (default 45s = three missed 15s heartbeats) | `hasNext()` throws `EngineUnavailable` |
+| Engine refuses the connect (401, bad filter) | `events(...)` throws; you never get a stream |
+
+Death is loud on purpose: ending quietly on a dropped connection is indistinguishable from "nothing
+is happening", and a tail cannot tell those apart. `Lagged` is *not* fatal — it is the stream saying
+your view has a hole, and iteration continues.
+
+**No replay and no auto-reconnect.** The stream is one connection's worth of events; polling stays
+the source of truth. `RequestRecorded.index` is the same journal index `RecordedPage.nextIndex()`
+reports, so the canonical loop is:
+
+```
+recordedPage()  →  baseline cursor
+events()        →  hello  →  iterate, tracking RequestRecorded.index
+                →  on Lagged / seq gap / EngineUnavailable:
+                   recordedSince(lastIndex)  →  reconnect  →  resume
+```
+
+Reconnect policy is the caller's: a retry schedule belongs to whatever drives the loop
+(`Schedule`, fs2 retries), not baked into a blocking connection.
+
+`EventStreamOptions`: `types(REQUESTS, LIFECYCLE)` (default both), `port(int)`,
+`match(MatchClause...)` (§8.2 — request events only), `idleTimeout(Duration)`.
+
+Capability probe: `events()` throws `UnsupportedOperationException` when streaming is unavailable —
+an engine too old to serve `/events` (404) or the embedded transport (no admin HTTP server). Both
+collapse to one signal because the caller's move is identical: poll, which is the supported
+baseline, not a degraded mode.
+
+Transport note: the SPI's `events()` returns the typed stream rather than raw `JsonValue` — a
+long-lived stream has no JSON envelope to hand back. Its reader is one daemon thread per stream
+feeding a bounded queue, so a slow consumer becomes TCP backpressure and the engine answers with
+`lagged`, exactly as it is designed to; handing the body to the shared `HttpClient` executor would
+park a pool thread every other admin call needs.
+
 ## 9. Intercept (TLS-MITM) — typed surface
 
 ```java
@@ -817,10 +884,10 @@ Implementation contract (so the implementer has zero decisions):
 
 ## 15. What is deliberately NOT in v1
 
-- Reactive/streaming recorded-request tail. The *primitive* now exists — `recordedPage()` /
-  `recordedSince(cursor)` (§8.1, #130) — and is what a correct tail must poll; the streaming sugar
-  itself stays downstream (rift-scala's `ZStream`/fs2 tails). A push tail over the engine's SSE
-  stream is #131.
+- Reactive/streaming recorded-request tail. Both primitives now exist — the poll cursor
+  (`recordedPage()`/`recordedSince()`, §8.1, #130) and the push stream (`events()`, §8.3, #131).
+  The streaming *sugar* stays downstream (rift-scala's `ZStream`/fs2 tails wrap `events()`'s
+  iterator); this SDK ships the connection, not the effect system's stream type.
 - OpenAPI → imposter import (differentiator; backlog).
 - Record/playback golden-file sugar (`startRecording(origin)` / auto-capture annotation flow —
   Hoverfly's best idea; backlog issue filed).

@@ -1,5 +1,7 @@
 package io.github.etacassiopeia.rift.transport;
 
+import io.github.etacassiopeia.rift.EventStream;
+import io.github.etacassiopeia.rift.EventStreamOptions;
 import io.github.etacassiopeia.rift.MatchClause;
 import io.github.etacassiopeia.rift.json.JsonValue;
 
@@ -156,6 +158,25 @@ public interface RiftTransport extends AutoCloseable {
     JsonValue spaceRecorded(int port, String flowId);
 
     void spaceDelete(int port, String flowId);
+
+    /**
+     * Opens a live subscription to the engine's admin event stream.
+     *
+     * <p>Unlike the rest of this SPI, this returns a typed {@link EventStream} rather than raw
+     * {@link JsonValue}: a long-lived stream has no JSON envelope to hand back, and re-framing SSE
+     * through a raw layer only to re-parse it above would buy nothing.
+     *
+     * <p>The default refuses. Streaming is an admin-HTTP capability, so a transport without one —
+     * the in-process FFI transport — has no stream to emulate; rift#461 expects those consumers to
+     * poll. That is the same answer an engine too old to serve {@code /events} gives, and both
+     * collapse to one signal because the caller's move is identical: poll instead.
+     *
+     * @throws UnsupportedOperationException if this transport cannot stream
+     */
+    default EventStream events(EventStreamOptions options) {
+        throw new UnsupportedOperationException(
+                "this transport has no admin event stream; poll recordedSince(...) instead");
+    }
 
     JsonValue buildInfo();
 

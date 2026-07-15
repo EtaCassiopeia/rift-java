@@ -98,6 +98,25 @@ public interface Rift extends AutoCloseable {
 
     void replaceAll(List<ImposterDefinition> imposters);
 
+    /**
+     * {@return a live subscription to the engine's admin event stream} A push tail of recorded
+     * requests and imposter lifecycle changes — the counterpart to polling
+     * {@link Imposter#recordedSince(long)}, not a replacement for it: the stream never replays, so
+     * polling stays the source of truth and is how a gap is recovered.
+     *
+     * <p>The caller owns the connection: close the returned stream to release it. Closing this
+     * {@code Rift} does not close streams it opened — they hold their own connections and outlive it
+     * until closed.
+     *
+     * @throws UnsupportedOperationException if this engine connection cannot stream — an engine too
+     *                                       old to serve {@code /events}, or the in-process embedded
+     *                                       transport, which has no admin HTTP server. Both mean the
+     *                                       same thing: poll instead, which is a supported baseline
+     *                                       rather than a degraded mode.
+     * @see EventStream
+     */
+    EventStream events(EventStreamOptions options);
+
     EngineInfo info();
 
     URI adminUri();

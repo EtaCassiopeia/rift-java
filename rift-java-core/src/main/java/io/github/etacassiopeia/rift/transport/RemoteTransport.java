@@ -1,5 +1,7 @@
 package io.github.etacassiopeia.rift.transport;
 
+import io.github.etacassiopeia.rift.EventStream;
+import io.github.etacassiopeia.rift.EventStreamOptions;
 import io.github.etacassiopeia.rift.MatchClause;
 import io.github.etacassiopeia.rift.error.CommunicationError;
 import io.github.etacassiopeia.rift.error.EngineError;
@@ -13,6 +15,7 @@ import io.github.etacassiopeia.rift.json.JsonString;
 import io.github.etacassiopeia.rift.json.JsonValue;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -344,6 +347,88 @@ public final class RemoteTransport implements RiftTransport {
     }
 
     @Override
+    public EventStream events(EventStreamOptions options) {
+        String path = "/events" + eventQuery(options);
+        HttpResponse<InputStream> response;
+        try {
+            // Not send(..., ofString()): that buffers the whole body, and this one never ends.
+            // ofInputStream returns once the headers are read, which is what lets the status be
+            // checked before a single frame is consumed.
+            response = sendStreaming(path);
+        } catch (IOException e) {
+            throw new EngineUnavailable("cannot reach the rift admin API at " + adminUri + ": " + e.getMessage(), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new EngineUnavailable("interrupted while opening the rift admin event stream at " + adminUri, e);
+        }
+
+        int status = response.statusCode();
+        if (status == 404) {
+            // An engine too old to serve /events. Same answer as a transport that cannot stream at
+            // all, because the caller's move is the same: poll.
+            drainQuietly(response.body());
+            throw new UnsupportedOperationException(
+                    "this rift engine has no admin event stream (404 " + path + "); poll recordedSince(...) instead");
+        }
+        if (!isSuccess(status)) {
+            // A rejected connect fails here, not mid-iteration — a stream you never got is not a
+            // stream that died.
+            throw mapError(status, readErrorBody(response.body()), OptionalInt.empty());
+        }
+        return new SseEventStream(response.body(), URI.create(base + path), options.idleTimeout());
+    }
+
+    private HttpResponse<InputStream> sendStreaming(String path) throws IOException, InterruptedException {
+        if (closed.get()) {
+            throw new IllegalStateException("this RiftTransport is closed");
+        }
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(base + path))
+                .header("Accept", "text/event-stream")
+                .GET();
+        // Deliberately no request timeout: the whole point is a connection that stays open. Silence
+        // is caught by the stream's own idle timeout, which the engine's heartbeat resets.
+        apiKey.ifPresent(key -> builder.header("Authorization", key));
+        return client.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
+    }
+
+    /** {@code ?types=&port=&match=} — the same clause rendering the journal reads use. */
+    private static String eventQuery(EventStreamOptions options) {
+        List<String> params = new ArrayList<>();
+        params.add("types=" + options.types().stream().map(RemoteTransport::wire)
+                .sorted().collect(java.util.stream.Collectors.joining(",")));
+        options.port().ifPresent(p -> params.add("port=" + p));
+        for (MatchClause clause : options.match()) {
+            params.add("match=" + enc(render(clause)));
+        }
+        return "?" + String.join("&", params);
+    }
+
+    /** The engine's spelling for an event family; kept here with the other wire rendering. */
+    private static String wire(EventStreamOptions.EventType type) {
+        return switch (type) {
+            case REQUESTS -> "requests";
+            case LIFECYCLE -> "lifecycle";
+        };
+    }
+
+    private static String readErrorBody(InputStream body) {
+        try (body) {
+            return new String(body.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            // The status is the signal; a body we could not read just means a less specific message.
+            return "";
+        }
+    }
+
+    private static void drainQuietly(InputStream body) {
+        try {
+            body.close();
+        } catch (IOException ignored) {
+            // Releasing a connection we are abandoning; nothing to report.
+        }
+    }
+
+    @Override
     public JsonValue buildInfo() {
         return executeJson("GET", "/config", null, OptionalInt.empty());
     }
@@ -458,8 +543,11 @@ public final class RemoteTransport implements RiftTransport {
     }
 
     private static RuntimeException mapError(HttpResponse<String> response, OptionalInt port) {
-        String message = extractErrorMessage(response.body());
-        int status = response.statusCode();
+        return mapError(response.statusCode(), response.body(), port);
+    }
+
+    private static RuntimeException mapError(int status, String body, OptionalInt port) {
+        String message = extractErrorMessage(body);
         if (status == 400) {
             return new InvalidDefinition(message);
         }
