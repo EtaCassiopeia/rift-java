@@ -45,6 +45,7 @@ final class FakeAdminServer implements AutoCloseable {
     private final List<Received> received = new ArrayList<>();
     // key: "METHOD /path"  (exact) or "METHOD /prefix*" (prefix) → handler
     private final Map<String, BiFunction<Received, Void, Response>> routes = new ConcurrentHashMap<>();
+    private final Map<String, StreamRoute> streams = new ConcurrentHashMap<>();
 
     FakeAdminServer() {
         try {
@@ -70,6 +71,32 @@ final class FakeAdminServer implements AutoCloseable {
         return this;
     }
 
+    /**
+     * Registers a route that streams instead of returning a body — the shape an SSE consumer needs,
+     * which the buffered {@link Response} path cannot express. The handler is handed a sink to write
+     * frames into and a latch that trips when the client disconnects; it runs on the server's thread
+     * and owns the response until it returns.
+     */
+    FakeAdminServer stream(String key, int status, StreamHandler handler) {
+        streams.put(key, new StreamRoute(status, handler));
+        return this;
+    }
+
+    @FunctionalInterface
+    interface StreamHandler {
+        void handle(Sink sink) throws Exception;
+    }
+
+    /** Writes raw bytes to a streaming response, flushing each one so the client sees it immediately. */
+    interface Sink {
+        void write(String chunk) throws IOException;
+
+        /** True once the client has gone away (its read end closed). */
+        boolean clientGone();
+    }
+
+    private record StreamRoute(int status, StreamHandler handler) {}
+
     FakeAdminServer respond(String key, int status, String body) {
         return on(key, (r, v) -> new Response(status, body));
     }
@@ -85,6 +112,12 @@ final class FakeAdminServer implements AutoCloseable {
         exchange.getRequestHeaders().forEach((k, v) -> headers.put(k.toLowerCase(), String.join(",", v)));
         Received r = new Received(method, fullPath, body, headers);
         received.add(r);
+
+        StreamRoute stream = streams.get(method + " " + path);
+        if (stream != null) {
+            serveStream(exchange, stream);
+            return;
+        }
 
         BiFunction<Received, Void, Response> handler = resolve(method, path);
         Response response = handler != null ? handler.apply(r, null) : new Response(404, "{\"errors\":[{\"code\":\"no such resource\",\"message\":\"not found\"}]}");
@@ -113,6 +146,44 @@ final class FakeAdminServer implements AutoCloseable {
 
     private static String readBody(InputStream in) throws IOException {
         return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    /** Chunked, flushed-per-write, and only returns when the handler is done or the client vanished. */
+    private void serveStream(HttpExchange exchange, StreamRoute route) throws IOException {
+        exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+        exchange.sendResponseHeaders(route.status(), 0);
+        java.io.OutputStream os = exchange.getResponseBody();
+        java.util.concurrent.atomic.AtomicBoolean gone = new java.util.concurrent.atomic.AtomicBoolean(false);
+        try {
+            route.handler().handle(new Sink() {
+                @Override
+                public void write(String chunk) throws IOException {
+                    try {
+                        os.write(chunk.getBytes(StandardCharsets.UTF_8));
+                        os.flush();
+                    } catch (IOException e) {
+                        // The client closed its end — the only way a stream route normally ends.
+                        gone.set(true);
+                        throw e;
+                    }
+                }
+
+                @Override
+                public boolean clientGone() {
+                    return gone.get();
+                }
+            });
+        } catch (IOException e) {
+            gone.set(true);
+        } catch (Exception e) {
+            throw new IOException(e);
+        } finally {
+            try {
+                exchange.close();
+            } catch (RuntimeException ignored) {
+                // the client is already gone; nothing left to signal
+            }
+        }
     }
 
     @Override
