@@ -57,7 +57,8 @@ final class SpaceImpl implements Space {
 
     @Override
     public List<RecordedRequest> recorded() {
-        return RecordedRequests.readAll(transport.spaceRecorded(port, flowId), "spaces/" + flowId + "/recorded");
+        return RecordedRequests.readAll(transport.spaceRecorded(port, flowId),
+                "savedRequests?match=flow_id=" + flowId);
     }
 
     @Override

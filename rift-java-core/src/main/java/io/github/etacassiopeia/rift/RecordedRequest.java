@@ -16,8 +16,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * A single recorded request, as returned by an imposter's {@code savedRequests}/{@code
- * spaces/{flowId}/recorded} endpoints. Parsed leniently via {@link #read(JsonValue)}: any field
+ * A single recorded request, as returned by an imposter's {@code savedRequests} endpoint (a space
+ * reads the same journal, filtered to its flow). Parsed leniently via {@link #read(JsonValue)}: any field
  * the engine omits comes back empty rather than throwing, since the exact shape recorded requests
  * take can vary by protocol and engine version.
  */

@@ -117,17 +117,18 @@ class RecordedShapeTest {
     @Test
     void aSpaceRecordedListIsHeldToTheSameContract() {
         try (FakeAdminServer s = new FakeAdminServer()) {
-            s.respond("GET /imposters/4545/spaces/flow-A/recorded", 200, "{\"nope\":true}");
+            s.respond("GET /imposters/4545/savedRequests", 200, "{\"nope\":true}");
             try (Rift rift = connect(s)) {
                 Imposter imp = created(s, rift);
 
                 // The space view parsed its list with a verbatim copy of the same logic, so it had a
-                // verbatim copy of the same silent empty.
+                // verbatim copy of the same silent empty. It now reads the journal through a
+                // flow_id filter (#142), but the container contract is the same one.
                 assertThrows(CommunicationError.class, () -> imp.space("flow-A").recorded());
             }
         }
         try (FakeAdminServer s = new FakeAdminServer()) {
-            s.respond("GET /imposters/4545/spaces/flow-A/recorded", 200, TWO);
+            s.respond("GET /imposters/4545/savedRequests", 200, TWO);
             try (Rift rift = connect(s)) {
                 assertEquals(List.of("/a", "/b"),
                         created(s, rift).space("flow-A").recorded().stream().map(RecordedRequest::path).toList());
