@@ -196,7 +196,7 @@ class EventStreamTest {
                 sink.write(HELLO);
                 // Alive, but with nothing to say — the steady state of a tail on an imposter nobody
                 // is calling. Only the heartbeat separates it from a connection that died.
-                for (int i = 0; i < 12 && !sink.clientGone(); i++) {
+                for (int i = 0; i < 30 && !sink.clientGone(); i++) {
                     Thread.sleep(50);
                     sink.write(": ping\n\n");
                 }
@@ -204,12 +204,15 @@ class EventStreamTest {
             });
             try (Rift rift = connect(s);
                  EventStream stream = rift.events(
-                         EventStreamOptions.builder().idleTimeout(Duration.ofMillis(200)).build())) {
+                         EventStreamOptions.builder().idleTimeout(Duration.ofSeconds(1)).build())) {
                 Iterator<RiftEvent> it = stream.iterator();
                 assertInstanceOf(RiftEvent.Hello.class, it.next());
 
-                // 600ms of heartbeats against a 200ms idle timeout: an idle clock that measured
-                // events rather than bytes would have killed this stream three times over.
+                // Two numbers matter, in opposite directions. The quiet span (~1.5s of pings) must
+                // exceed the 1s timeout, or an events-only clock would survive and the test would
+                // prove nothing. Each ping gap (50ms) must stay far under it, or a loaded runner
+                // stalling between writes looks like a dead connection — which it did at 50ms
+                // against a 200ms timeout. 20x of headroom buys the second without losing the first.
                 assertInstanceOf(RiftEvent.RequestRecorded.class, it.next());
             }
         }
