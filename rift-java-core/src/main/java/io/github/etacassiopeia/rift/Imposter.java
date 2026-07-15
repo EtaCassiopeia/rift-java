@@ -88,6 +88,17 @@ public interface Imposter {
     RecordedPage recordedPage();
 
     /**
+     * {@return everything retained that every clause accepts, plus the cursor to resume from}
+     * Filtering happens engine-side, so the page costs only what it returns.
+     *
+     * @throws UnsupportedOperationException if this engine connection cannot filter server-side (the
+     *                                       in-process embedded transport) — it refuses rather than
+     *                                       answering with the entries you asked to exclude
+     * @see MatchClause
+     */
+    RecordedPage recordedPage(MatchClause... filters);
+
+    /**
      * {@return the entries recorded strictly after {@code cursor}, plus the next cursor} The poll
      * step of a request tail: pass back the previous page's {@link RecordedPage#nextIndex()}
      * verbatim. A cursor at the tip yields an empty page whose cursor is still present — that is
@@ -102,7 +113,33 @@ public interface Imposter {
      */
     RecordedPage recordedSince(long cursor);
 
+    /**
+     * {@return the entries after {@code cursor} that every clause accepts, plus the next cursor} The
+     * filtered tail poll.
+     *
+     * <p>The engine cuts by cursor first and filters second, and the returned cursor advances past
+     * the entries the filter rejected — so a page can come back empty while its cursor still moves,
+     * and the tail never re-scans a range it has already judged.
+     *
+     * @throws UnsupportedOperationException if this engine connection cannot filter server-side
+     * @see MatchClause
+     */
+    RecordedPage recordedSince(long cursor, MatchClause... filters);
+
     void clearRecorded();
+
+    /**
+     * Clears only the recorded requests every clause accepts, leaving the rest — e.g. dropping one
+     * tenant's traffic from a journal shared by several.
+     *
+     * <p>Journal indices are not reset by a clear, so a cursor held across this one stays valid.
+     *
+     * @throws UnsupportedOperationException if this engine connection cannot scope a clear
+     *                                       server-side — it refuses rather than widening the clear
+     *                                       to delete everything
+     * @see MatchClause
+     */
+    void clearRecorded(MatchClause... filters);
 
     void clearProxyResponses();
 

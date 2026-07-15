@@ -189,7 +189,7 @@ class RecordedCursorTest {
         // declines to advance, exactly as a cursor-less engine does over HTTP.
         RiftTransport cursorless = new CursorlessTransport();
 
-        RiftTransport.RecordedSlice slice = cursorless.recordedSince(4545, OptionalLong.of(7));
+        RiftTransport.RecordedSlice slice = cursorless.recordedSince(4545, OptionalLong.of(7), java.util.List.of());
 
         assertEquals(OptionalLong.empty(), slice.nextIndex(), "never synthesize an index");
         assertFalse(slice.truncated());

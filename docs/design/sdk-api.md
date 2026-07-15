@@ -286,8 +286,11 @@ public interface Imposter {
   List<RecordedRequest> recorded();
   List<RecordedRequest> recorded(RequestMatch match);      // client-side filtered
   RecordedPage recordedPage();                             // baseline: retained + cursor (§8)
+  RecordedPage recordedPage(MatchClause... filters);       // server-side filtered (§8.2)
   RecordedPage recordedSince(long cursor);                 // tail poll: strictly newer than cursor
+  RecordedPage recordedSince(long cursor, MatchClause... filters);
   void clearRecorded();
+  void clearRecorded(MatchClause... filters);              // scoped clear
   void clearProxyResponses();                              // DELETE savedProxyResponses
   void verify(RequestMatch match);                         // == atLeastOnce(); engine-evaluated (§7.7)
   void verify(RequestMatch match, VerificationTimes times);
@@ -591,10 +594,50 @@ Canonical tail: `recordedPage()` once, then `recordedSince(nextIndex)` on an int
 cursor each time and re-baselining on `truncated`. Server-side `match=` filtering composes with the
 cursor via additive overloads — see #138.
 
-Transport SPI: `RiftTransport.recordedSince(port, OptionalLong)` returns the raw
+Transport SPI: `RiftTransport.recordedSince(port, OptionalLong, List<MatchClause>)` returns the raw
 `RecordedSlice{requests, nextIndex, truncated}`. Its **default** serves the full list with an empty
 cursor, which is exactly what a cursor-less engine does — so the in-process FFI transport, which has
 no HTTP response to read, reports "unsupported" honestly with no code of its own.
+
+### 8.2 `MatchClause` — server-side filtering
+
+```java
+public sealed interface MatchClause {
+    static MatchClause header(String name, String value);  // match=header:<Name>=<Value>
+    static MatchClause flowId(String flowId);              // match=flow_id=<Value>
+}
+```
+
+**`MatchClause` is not `RequestMatch`.** They answer different questions and do not convert:
+
+| | `RequestMatch` (§7.7) | `MatchClause` |
+|---|---|---|
+| What | Mountebank predicate set | journal/stream filter clause |
+| Evaluated by | the engine's predicate engine, via `POST /verify` | the engine's journal filter, via `match=` |
+| Grammar | full — `equals`/`contains`/`matches`/`jsonPath`/`xpath`/`and`/`or`/`not` | closed — header equality, flow-id equality |
+| Used for | `verify(match, times)`, `recorded(match)` (client-side filter) | `recordedPage`/`recordedSince`/`clearRecorded` filters, `/events?match=` (#131) |
+
+The grammar is closed because the engine's is: it rejects a clause it cannot parse with a 400 rather
+than serving everything, since a filter that silently widened would cross-contaminate correlated
+scenarios. The sealed type mirrors that — an invalid clause is not constructible. The header name is
+held to the HTTP token grammar, which is stricter than the engine's own empty-name check on purpose:
+a name containing `=` would *not* 400, it would re-split into a different name and value and filter
+on something the caller never asked for. Silently meaning something else is the failure mode the
+closed grammar exists to prevent, so the one input that could cause it is rejected at construction.
+
+Clauses **AND** together and are applied *after* the cursor cut, and the cursor **advances past
+entries a clause rejected** — so a filtered page can be empty while its cursor still moves, and a
+filtered tail never re-scans a range it has already judged.
+
+Encoding is the transport's job, not the caller's. The clause is percent-encoded whole: the engine
+splits a query pair on its first `=` and decodes only afterwards, so the `:`/`=` that give a clause
+its structure survive while a `%`, `&` or space in a caller's value cannot escape into the query. A
+space must ride as `%20` — the engine decodes URIs, not forms, so `+` would stay a literal `+`.
+
+A transport that cannot filter server-side (the FFI one) **refuses** a filtered read or scoped clear
+rather than widening it: answering unfiltered would return the entries the caller excluded, and a
+widened clear would delete the ones they kept. Neither is expressible client-side anyway — a
+recorded entry carries no resolved flow id.
 
 ## 9. Intercept (TLS-MITM) — typed surface
 

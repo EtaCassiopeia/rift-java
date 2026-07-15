@@ -1,5 +1,6 @@
 package io.github.etacassiopeia.rift.transport;
 
+import io.github.etacassiopeia.rift.MatchClause;
 import io.github.etacassiopeia.rift.error.CommunicationError;
 import io.github.etacassiopeia.rift.error.EngineError;
 import io.github.etacassiopeia.rift.error.EngineUnavailable;
@@ -189,9 +190,8 @@ public final class RemoteTransport implements RiftTransport {
     }
 
     @Override
-    public RecordedSlice recordedSince(int port, OptionalLong since) {
-        String path = "/imposters/" + port + "/savedRequests"
-                + (since.isPresent() ? "?since=" + since.getAsLong() : "");
+    public RecordedSlice recordedSince(int port, OptionalLong since, List<MatchClause> match) {
+        String path = "/imposters/" + port + "/savedRequests" + query(since, match);
         // Not executeJson: the cursor rides in headers, which that path discards.
         HttpResponse<String> response = send("GET", path, null);
         if (!isSuccess(response.statusCode())) {
@@ -199,6 +199,38 @@ public final class RemoteTransport implements RiftTransport {
         }
         JsonValue requests = parseJsonBody(response, "GET " + path);
         return new RecordedSlice(requests, nextIndex(response), truncated(response));
+    }
+
+    @Override
+    public void clearRecorded(int port, List<MatchClause> match) {
+        executeVoid("DELETE", "/imposters/" + port + "/savedRequests" + query(OptionalLong.empty(), match),
+                null, OptionalInt.of(port));
+    }
+
+    /** {@code ?since=<n>} then one {@code &match=} per clause — the order the engine applies them in. */
+    private static String query(OptionalLong since, List<MatchClause> match) {
+        StringBuilder q = new StringBuilder();
+        since.ifPresent(cursor -> q.append(q.isEmpty() ? "?" : "&").append("since=").append(cursor));
+        for (MatchClause clause : match) {
+            q.append(q.isEmpty() ? "?" : "&").append("match=").append(enc(render(clause)));
+        }
+        return q.toString();
+    }
+
+    /**
+     * A clause in the engine's grammar, before encoding. {@link #enc} then percent-encodes the whole
+     * thing: the engine splits a query pair on its first {@code =} and decodes only afterwards, so
+     * the {@code :} and {@code =} that give the clause its structure survive, while a {@code %},
+     * {@code &} or space inside a caller's value cannot escape into the query.
+     */
+    private static String render(MatchClause clause) {
+        if (clause instanceof MatchClause.Header header) {
+            return "header:" + header.name() + "=" + header.value();
+        }
+        if (clause instanceof MatchClause.FlowId flowId) {
+            return "flow_id=" + flowId.value();
+        }
+        throw new IllegalStateException("unreachable: " + clause);
     }
 
     private static OptionalLong nextIndex(HttpResponse<String> response) {
