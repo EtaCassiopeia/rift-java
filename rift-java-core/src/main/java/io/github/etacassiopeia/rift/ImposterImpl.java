@@ -26,6 +26,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 final class ImposterImpl implements Imposter {
 
@@ -166,7 +167,24 @@ final class ImposterImpl implements Imposter {
 
     @Override
     public List<RecordedRequest> recorded() {
-        JsonValue result = transport.recorded(port);
+        return readRequests(transport.recorded(port));
+    }
+
+    @Override
+    public RecordedPage recordedPage() {
+        return page(transport.recordedSince(port, OptionalLong.empty()));
+    }
+
+    @Override
+    public RecordedPage recordedSince(long cursor) {
+        return page(transport.recordedSince(port, OptionalLong.of(cursor)));
+    }
+
+    private static RecordedPage page(RiftTransport.RecordedSlice slice) {
+        return new RecordedPage(readRequests(slice.requests()), slice.nextIndex(), slice.truncated());
+    }
+
+    private static List<RecordedRequest> readRequests(JsonValue result) {
         List<RecordedRequest> out = new ArrayList<>();
         if (result instanceof JsonArray arr) {
             for (JsonValue v : arr.items()) {

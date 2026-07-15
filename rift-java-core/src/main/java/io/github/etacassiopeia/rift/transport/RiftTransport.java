@@ -4,6 +4,7 @@ import io.github.etacassiopeia.rift.json.JsonValue;
 
 import java.net.URI;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 /**
  * The internal SPI a {@code Rift} client speaks against: one call per admin-API operation, with
@@ -61,6 +62,33 @@ public interface RiftTransport extends AutoCloseable {
     }
 
     JsonValue recorded(int port);
+
+    /**
+     * One page of {@code savedRequests} plus its cursor metadata, still as raw JSON — the facade
+     * owns the typed translation.
+     *
+     * @param nextIndex the {@code x-rift-next-index} cursor, or empty when the transport did not
+     *                  report one (see {@link #recordedSince})
+     * @param truncated the {@code x-rift-truncated} signal: retention evicted unseen entries
+     */
+    record RecordedSlice(JsonValue requests, OptionalLong nextIndex, boolean truncated) {}
+
+    /**
+     * Reads {@code savedRequests} with an optional journal cursor (rift#603): entries strictly newer
+     * than {@code since}, or everything retained when {@code since} is empty. The two are different
+     * questions, not one with a default — a baseline read never reports truncation, while
+     * {@code since=0} ("replay everything") does once anything has been evicted.
+     *
+     * <p>The default serves the full list and reports no cursor, which is exactly what an engine
+     * without cursor support does over HTTP. It is the honest answer for any transport that cannot
+     * see response headers — notably the in-process FFI one, where there is no HTTP response to read
+     * and rift#603 expects consumers to poll. Synthesizing an index from an array offset here would
+     * re-introduce the skip-entries bug the cursor exists to remove, so implementations that cannot
+     * obtain a real cursor must leave {@code nextIndex} empty rather than invent one.
+     */
+    default RecordedSlice recordedSince(int port, OptionalLong since) {
+        return new RecordedSlice(recorded(port), OptionalLong.empty(), false);
+    }
 
     void clearRecorded(int port);
 

@@ -9,6 +9,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,9 +24,20 @@ final class FakeAdminServer implements AutoCloseable {
 
     record Received(String method, String path, String body, Map<String, String> headers) {}
 
-    record Response(int status, String body) {
+    record Response(int status, String body, Map<String, String> headers) {
+
+        Response(int status, String body) {
+            this(status, body, Map.of());
+        }
+
         static Response ok(String body) {
             return new Response(200, body);
+        }
+
+        Response withHeader(String name, String value) {
+            Map<String, String> merged = new LinkedHashMap<>(headers);
+            merged.put(name, value);
+            return new Response(status, body, merged);
         }
     }
 
@@ -78,6 +90,7 @@ final class FakeAdminServer implements AutoCloseable {
         Response response = handler != null ? handler.apply(r, null) : new Response(404, "{\"errors\":[{\"code\":\"no such resource\",\"message\":\"not found\"}]}");
         byte[] out = response.body() == null ? new byte[0] : response.body().getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
+        response.headers().forEach(exchange.getResponseHeaders()::add);
         exchange.sendResponseHeaders(response.status(), out.length == 0 ? -1 : out.length);
         try (var os = exchange.getResponseBody()) {
             os.write(out);

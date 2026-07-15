@@ -78,6 +78,30 @@ public interface Imposter {
     /** Recorded requests filtered client-side against {@code match}'s predicates (equals on method/path only; see {@code ImposterImpl}). */
     List<RecordedRequest> recorded(RequestMatch match);
 
+    /**
+     * {@return everything currently retained, plus the cursor to resume from} The baseline of a
+     * request tail; it asks "what is retained?", which the engine can always answer in full, so it
+     * never reports {@link RecordedPage#truncated()}.
+     *
+     * @see RecordedPage
+     */
+    RecordedPage recordedPage();
+
+    /**
+     * {@return the entries recorded strictly after {@code cursor}, plus the next cursor} The poll
+     * step of a request tail: pass back the previous page's {@link RecordedPage#nextIndex()}
+     * verbatim. A cursor at the tip yields an empty page whose cursor is still present — that is
+     * "nothing new", not "unsupported".
+     *
+     * <p>Unlike {@link #recordedPage()} this may report {@link RecordedPage#truncated()}: asking for
+     * everything after a cursor is answerable only if nothing you had not seen was evicted.
+     *
+     * @param cursor a cursor previously returned in {@link RecordedPage#nextIndex()}; the engine
+     *               rejects a negative one
+     * @see RecordedPage
+     */
+    RecordedPage recordedSince(long cursor);
+
     void clearRecorded();
 
     void clearProxyResponses();

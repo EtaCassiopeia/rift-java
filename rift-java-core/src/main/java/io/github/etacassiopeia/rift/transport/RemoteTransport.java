@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -38,6 +39,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * is reported as {@link Optional#empty()}, not an exception.
  */
 public final class RemoteTransport implements RiftTransport {
+
+    private static final String NEXT_INDEX_HEADER = "x-rift-next-index";
+    private static final String TRUNCATED_HEADER = "x-rift-truncated";
 
     private final URI adminUri;
     private final String base;
@@ -182,6 +186,40 @@ public final class RemoteTransport implements RiftTransport {
     @Override
     public JsonValue recorded(int port) {
         return executeJson("GET", "/imposters/" + port + "/savedRequests", null, OptionalInt.of(port));
+    }
+
+    @Override
+    public RecordedSlice recordedSince(int port, OptionalLong since) {
+        String path = "/imposters/" + port + "/savedRequests"
+                + (since.isPresent() ? "?since=" + since.getAsLong() : "");
+        // Not executeJson: the cursor rides in headers, which that path discards.
+        HttpResponse<String> response = send("GET", path, null);
+        if (!isSuccess(response.statusCode())) {
+            throw mapError(response, OptionalInt.of(port));
+        }
+        JsonValue requests = parseJsonBody(response, "GET " + path);
+        return new RecordedSlice(requests, nextIndex(response), truncated(response));
+    }
+
+    private static OptionalLong nextIndex(HttpResponse<String> response) {
+        Optional<String> raw = response.headers().firstValue(NEXT_INDEX_HEADER);
+        if (raw.isEmpty()) {
+            return OptionalLong.empty();
+        }
+        try {
+            return OptionalLong.of(Long.parseLong(raw.get().trim()));
+        } catch (NumberFormatException e) {
+            // Reading an unparseable cursor as "absent" would hide a broken engine or a header-
+            // mangling proxy inside the legitimate do-not-advance path, where it looks like a tail
+            // that silently never advances. An engine that answers must answer with a number.
+            throw new CommunicationError(
+                    "rift admin API returned a malformed " + NEXT_INDEX_HEADER + " header: \"" + raw.get() + "\"", e);
+        }
+    }
+
+    private static boolean truncated(HttpResponse<String> response) {
+        // Presence is the whole signal: the engine emits this only when true and never sends `false`.
+        return response.headers().firstValue(TRUNCATED_HEADER).isPresent();
     }
 
     @Override

@@ -285,6 +285,8 @@ public interface Imposter {
   // -- recorded requests + verification (§8) --
   List<RecordedRequest> recorded();
   List<RecordedRequest> recorded(RequestMatch match);      // client-side filtered
+  RecordedPage recordedPage();                             // baseline: retained + cursor (§8)
+  RecordedPage recordedSince(long cursor);                 // tail poll: strictly newer than cursor
   void clearRecorded();
   void clearProxyResponses();                              // DELETE savedProxyResponses
   void verify(RequestMatch match);                         // == atLeastOnce(); engine-evaluated (§7.7)
@@ -561,6 +563,39 @@ public record RecordedRequest(
 }
 ```
 
+`RecordedRequest` deliberately carries **no index**. The engine's journal index is per *response*,
+not per entry — it rides in `x-rift-next-index` on `savedRequests` and in `id:` on the SSE stream,
+and the body stays a bare array. An index field here would be empty on every path (rift#603, and
+the ruling on #130).
+
+### 8.1 `RecordedPage` — the tail cursor
+
+```java
+public record RecordedPage(
+    List<RecordedRequest> requests,
+    OptionalLong nextIndex,      // x-rift-next-index; empty = DO NOT advance
+    boolean truncated) {}        // x-rift-truncated; retention evicted unseen entries
+```
+
+Tailing by tracking an offset into `recorded()` looks equivalent and is not: array positions shift
+under the 10k retention cap and under `DELETE savedRequests`, so an offset silently skips or replays
+entries. The engine assigns a stable, 1-based, per-port index instead.
+
+| Field | Contract |
+|---|---|
+| `nextIndex` present | Pass back verbatim as the next `since`. A present `0` is a real cursor: nothing recorded yet. |
+| `nextIndex` empty | Older engine / no stable indices / degraded partial read — indistinguishable by design, because the answer to all three is the same: keep the cursor you hold and poll again. Never an error, never synthesized from an array offset. |
+| `truncated` | A hole in *your* view: the cap evicted entries you had not seen. Re-baseline with `recordedPage()`. A signal, not an error — deleting data you asked to delete is not a hole, so a cursor held across a clear is never flagged. |
+
+Canonical tail: `recordedPage()` once, then `recordedSince(nextIndex)` on an interval, updating the
+cursor each time and re-baselining on `truncated`. Server-side `match=` filtering composes with the
+cursor via additive overloads — see #138.
+
+Transport SPI: `RiftTransport.recordedSince(port, OptionalLong)` returns the raw
+`RecordedSlice{requests, nextIndex, truncated}`. Its **default** serves the full list with an empty
+cursor, which is exactly what a cursor-less engine does — so the in-process FFI transport, which has
+no HTTP response to read, reports "unsupported" honestly with no code of its own.
+
 ## 9. Intercept (TLS-MITM) — typed surface
 
 ```java
@@ -739,8 +774,10 @@ Implementation contract (so the implementer has zero decisions):
 
 ## 15. What is deliberately NOT in v1
 
-- Reactive/streaming recorded-request tail (rift-scala will poll `recorded()`; SSE when the
-  engine grows it).
+- Reactive/streaming recorded-request tail. The *primitive* now exists — `recordedPage()` /
+  `recordedSince(cursor)` (§8.1, #130) — and is what a correct tail must poll; the streaming sugar
+  itself stays downstream (rift-scala's `ZStream`/fs2 tails). A push tail over the engine's SSE
+  stream is #131.
 - OpenAPI → imposter import (differentiator; backlog).
 - Record/playback golden-file sugar (`startRecording(origin)` / auto-capture annotation flow —
   Hoverfly's best idea; backlog issue filed).
