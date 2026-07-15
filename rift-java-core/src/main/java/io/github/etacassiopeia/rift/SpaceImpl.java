@@ -57,10 +57,7 @@ final class SpaceImpl implements Space {
 
     @Override
     public List<RecordedRequest> recorded() {
-        JsonValue result = transport.spaceRecorded(port, flowId);
-        List<RecordedRequest> out = new ArrayList<>();
-        collectRecorded(result, out);
-        return List.copyOf(out);
+        return RecordedRequests.readAll(transport.spaceRecorded(port, flowId), "spaces/" + flowId + "/recorded");
     }
 
     @Override
@@ -111,15 +108,4 @@ final class SpaceImpl implements Space {
         }
     }
 
-    private static void collectRecorded(JsonValue result, List<RecordedRequest> out) {
-        if (result instanceof JsonArray arr) {
-            for (JsonValue v : arr.items()) {
-                out.add(RecordedRequest.read(v));
-            }
-        } else if (result instanceof JsonObject obj && obj.get("requests") instanceof JsonArray arr) {
-            for (JsonValue v : arr.items()) {
-                out.add(RecordedRequest.read(v));
-            }
-        }
-    }
 }
