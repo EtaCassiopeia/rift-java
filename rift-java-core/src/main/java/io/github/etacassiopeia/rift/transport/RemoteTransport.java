@@ -327,9 +327,15 @@ public final class RemoteTransport implements RiftTransport {
         return executeJson("GET", "/imposters/" + port + "/spaces/" + enc(flowId) + "/stubs", null, OptionalInt.of(port));
     }
 
+    /**
+     * There is no space-scoped recorded-requests endpoint — the admin API exposes only
+     * {@code spaces/{flowId}} and {@code spaces/{flowId}/stubs}, and a space's traffic is read from
+     * the imposter's journal with a {@code flow_id} filter. The engine resolves each request's flow
+     * id as it records it, so the cut is server-side and this costs only what it returns.
+     */
     @Override
     public JsonValue spaceRecorded(int port, String flowId) {
-        return executeJson("GET", "/imposters/" + port + "/spaces/" + enc(flowId) + "/recorded", null, OptionalInt.of(port));
+        return recordedSince(port, OptionalLong.empty(), List.of(MatchClause.flowId(flowId))).requests();
     }
 
     @Override

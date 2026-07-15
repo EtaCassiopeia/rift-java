@@ -204,7 +204,7 @@ class VerifyIntegrationTest {
 
     @Test
     void spaceRecordedWithMatchFilters() {
-        routes.put("GET /imposters/4545/spaces/flow-A/recorded",
+        routes.put("GET /imposters/4545/savedRequests",
                 "{\"requests\":[{\"method\":\"GET\",\"path\":\"/a\"},{\"method\":\"GET\",\"path\":\"/b\"}]}");
         List<io.github.etacassiopeia.rift.RecordedRequest> hits = recordingImposter().space("flow-A").recorded(onGet("/a"));
         assertEquals(1, hits.size());
