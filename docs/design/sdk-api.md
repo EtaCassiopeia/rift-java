@@ -401,7 +401,10 @@ IsSpec copyObject(CopySpec copy)                         // _behaviors.copy (sin
 IsSpec lookup(LookupSpec... lookups)                     // _behaviors.lookup (array wire form)
 IsSpec lookupObject(LookupSpec lookup)                   // _behaviors.lookup (single-object wire form)
 IsSpec shellTransform(String... commands)                // _behaviors.shellTransform
-IsSpec waitScript(String source)                         // _behaviors.wait as a bare function string
+IsSpec waitInject(String script)                         // _behaviors.wait as {"inject": ...}; a rift superset, not portable to Mountebank (rift#608)
+IsSpec waitScript(String source)                         // _behaviors.wait as a bare function string (the Mountebank-compatible spelling)
+// both wait spellings are one injection capability: the engine must run with --allowInjection or it
+// rejects the imposter with 400 (rift#610). Fixed/{min,max} waits are unaffected.
 IsSpec templated()                                       // rename of template(); _rift.templated
 // probabilistic _rift faults (chainable, composable):
 IsSpec withLatencyFault(double probability, Duration min, Duration max)

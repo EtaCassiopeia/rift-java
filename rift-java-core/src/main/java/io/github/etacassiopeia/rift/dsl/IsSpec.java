@@ -133,12 +133,24 @@ public final class IsSpec implements ResponseSpec {
         return withBehavior(new Behavior.Wait(new io.github.etacassiopeia.rift.model.WaitSpec.Range(minMs, maxMs)));
     }
 
-    /** Delays the response by a duration computed by the given script (an {@code inject}ed {@code wait} value). */
+    /**
+     * Delays the response by a duration computed by the given script (an {@code inject}ed {@code wait}
+     * value) — rift's object spelling, a superset not portable to Mountebank (rift#608).
+     *
+     * <p>A function wait is an injection surface in either spelling: the engine must run with
+     * {@code --allowInjection} or it rejects the imposter with a 400 ({@link
+     * io.github.etacassiopeia.rift.error.InvalidDefinition}). {@link #waitMs} and {@link #waitBetween}
+     * are unaffected.
+     */
     public IsSpec waitInject(String script) {
         return withBehavior(new Behavior.Wait(new io.github.etacassiopeia.rift.model.WaitSpec.Inject(script)));
     }
 
-    /** Delays the response by a bare-string {@code wait} (a function body / named latency), round-tripped verbatim. */
+    /**
+     * Delays the response by a bare-string {@code wait} (a function body / named latency), round-tripped
+     * verbatim — the Mountebank-compatible spelling of {@link #waitInject}, and equally an injection
+     * surface: it needs the engine's {@code --allowInjection} for the same reason (rift#610).
+     */
     public IsSpec waitScript(String source) {
         return withBehavior(new Behavior.Wait(new io.github.etacassiopeia.rift.model.WaitSpec.Script(source)));
     }
