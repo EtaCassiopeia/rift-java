@@ -30,9 +30,11 @@ public sealed interface RiftEvent {
     /**
      * The opening frame, sent once on connect.
      *
-     * @param seqAtConnect the sequence position the stream starts from — everything before it
-     *                     happened before you connected, and is only reachable by polling
-     * @param port         the port this stream was filtered to, or empty when it spans the engine
+     * @param engineVersion the version of the engine serving the stream
+     * @param seqAtConnect  the sequence position the stream starts from — everything before it
+     *                      happened before you connected, and is only reachable by polling
+     * @param types         the event families this stream will deliver, per the requested filter
+     * @param port          the port this stream was filtered to, or empty when it spans the engine
      */
     record Hello(String engineVersion, long seqAtConnect, List<String> types, OptionalInt port) implements RiftEvent {
 
@@ -50,11 +52,15 @@ public sealed interface RiftEvent {
      * An imposter recorded a request. Requires the imposter to have {@code recordRequests} on — this
      * is a tail of the journal, not a tap of all traffic.
      *
-     * @param index the journal index, the same one {@link RecordedPage#nextIndex()} reports for the
-     *              polling side (rift#603) — so the last one seen is what you pass to
-     *              {@link Imposter#recordedSince(long)} to reconcile. Empty when the journal backend
-     *              has no stable indices, which is the same capability probe the polling side uses:
-     *              without it, do not try to resume from a position.
+     * @param seq     this event's position in the engine's sequence (the SSE {@code id:})
+     * @param port    the imposter that recorded the request
+     * @param index   the journal index, the same one {@link RecordedPage#nextIndex()} reports for the
+     *                polling side (rift#603) — so the last one seen is what you pass to
+     *                {@link Imposter#recordedSince(long)} to reconcile. Empty when the journal backend
+     *                has no stable indices, which is the same capability probe the polling side uses:
+     *                without it, do not try to resume from a position.
+     * @param flowId  the resolved flow id, when the imposter resolves one; empty otherwise
+     * @param request the recorded request, parsed the same way {@link Imposter#recorded()} parses it
      */
     record RequestRecorded(OptionalLong seq, int port, OptionalLong index, Optional<String> flowId,
                            RecordedRequest request) implements RiftEvent {}
@@ -62,8 +68,10 @@ public sealed interface RiftEvent {
     /**
      * An imposter was created, replaced, or deleted.
      *
-     * @param port the imposter affected, or empty for an engine-wide event — {@link Action#ALL_DELETED}
-     *             names no single port, so there is no port to report rather than a placeholder one
+     * @param seq    this event's position in the engine's sequence (the SSE {@code id:})
+     * @param action what happened to the imposter
+     * @param port   the imposter affected, or empty for an engine-wide event — {@link Action#ALL_DELETED}
+     *               names no single port, so there is no port to report rather than a placeholder one
      */
     record ImposterChanged(OptionalLong seq, Action action, OptionalInt port) implements RiftEvent {
 
@@ -80,6 +88,8 @@ public sealed interface RiftEvent {
      * <p>Not an error, and not fatal — iteration continues. It is the stream telling you your view
      * has a hole, which is the whole point of it being lossy-<em>but-loud</em>: reconcile with
      * {@link Imposter#recordedSince(long)} from the last {@link RequestRecorded#index()} you saw.
+     *
+     * @param missed how many events were dropped before reaching this stream
      */
     record Lagged(long missed) implements RiftEvent {
 
