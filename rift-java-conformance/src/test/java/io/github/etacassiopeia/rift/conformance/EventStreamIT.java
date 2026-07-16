@@ -53,7 +53,9 @@ class EventStreamIT {
 
                     RiftEvent.Hello hello = assertInstanceOf(RiftEvent.Hello.class, it.next(),
                             "the engine opens with hello");
-                    assertTrue(hello.engineVersion().startsWith("0.13."), hello.engineVersion());
+                    // The hello envelope reports the version we pinned and spawned — assert against
+                    // the pin itself so this stays a drift-catcher rather than a hardcoded prefix.
+                    assertEquals(io.github.etacassiopeia.rift.RiftVersion.engineVersion(), hello.engineVersion());
 
                     get(imp.uri() + "/pushed");
 
