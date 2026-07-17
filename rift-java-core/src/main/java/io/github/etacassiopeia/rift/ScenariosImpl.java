@@ -28,7 +28,7 @@ final class ScenariosImpl implements Scenarios {
 
     @Override
     public List<State> list(String flowId) {
-        return read(Optional.of(flowId));
+        return read(Optional.of(FlowIds.require(flowId)));
     }
 
     @Override
@@ -47,7 +47,7 @@ final class ScenariosImpl implements Scenarios {
 
     @Override
     public void setState(String name, String state, String flowId) {
-        transport.setScenarioState(port, name, state, Optional.of(flowId));
+        transport.setScenarioState(port, name, state, Optional.of(FlowIds.require(flowId)));
     }
 
     @Override

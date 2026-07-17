@@ -19,6 +19,10 @@ import java.util.OptionalLong;
  *
  * <p>{@link #close()} is idempotent and releases any transport-owned resources (e.g. an HTTP
  * client, a spawned engine process).
+ *
+ * <p>Flow ids reach this SPI <em>verbatim</em>: null/blank rejection is the facade's job (every
+ * public path validates before it gets here, see {@code io.github.etacassiopeia.rift.FlowIds}), so
+ * these methods pass a {@code flowId} through unchanged and never re-validate it.
  */
 public interface RiftTransport extends AutoCloseable {
 
