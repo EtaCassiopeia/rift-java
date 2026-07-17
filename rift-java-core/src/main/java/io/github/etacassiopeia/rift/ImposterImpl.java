@@ -223,12 +223,14 @@ final class ImposterImpl implements Imposter {
 
     @Override
     public Space space(String flowId) {
+        FlowIds.require(flowId);
         warnIfSpacesUnusable();
         return new SpaceImpl(port, flowId, transport);
     }
 
     @Override
     public FlowState flowState(String flowId) {
+        FlowIds.require(flowId);
         warnIfFlowStateUnusable();
         return new FlowStateImpl(port, flowId, transport);
     }

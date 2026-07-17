@@ -364,6 +364,14 @@ warns: `ImposterSpec.build()` throws if a space stub is declared without a heade
 `Imposter.space()`/`flowState()` log one advisory warning on a source-less / trigger-less def. Declare
 `flowState(inMemoryFlowState().flowIdFromHeader("X-Your-Header"))` for spaces.
 
+**Blank flow ids are rejected at the facade.** Every caller-supplied `flowId` (`Imposter.space`/
+`flowState`, `Scenarios.list`/`setState`, `MatchClause.flowId`, `StubSpec.inSpace`) must be non-null
+and non-blank: a blank id is never the default flow but a distinct, silently-wrong engine partition
+(and on the flow-state DELETE path a destructive misroute), so `""`/whitespace throws
+`IllegalArgumentException` and `null` throws `NullPointerException`. Any non-blank id passes through
+verbatim — no trim, no normalization. The `RiftTransport` SPI receives ids already validated and
+never re-checks them.
+
 ## 7. DSL v2 — closing the surface gaps
 
 `RiftDsl` remains the single static-import hub (WireMock model). Grammar and existing entry

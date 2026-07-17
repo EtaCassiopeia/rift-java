@@ -8,6 +8,7 @@ import io.github.etacassiopeia.rift.verify.RequestMatch;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -152,8 +153,15 @@ public final class StubSpec implements RequestMatch {
      * a header-form flow-id source ({@link FlowStateSpec#flowIdFromHeader}) — the engine's flow-id
      * source defaults to the imposter port, so a space stub can otherwise never match. {@link
      * ImposterSpec#build()} throws if a space stub is present without one.
+     *
+     * @throws IllegalArgumentException if {@code flowId} is blank — a blank id is never the default
+     *     flow but a distinct, silently-wrong partition, so it is rejected rather than sent verbatim
      */
     public StubSpec inSpace(String flowId) {
+        Objects.requireNonNull(flowId, "flowId");
+        if (flowId.isBlank()) {
+            throw new IllegalArgumentException("flowId must not be blank");
+        }
         return new StubSpec(predicates, responses, scenarioName, requiredScenarioState, newScenarioState, Optional.of(flowId), id, routePattern);
     }
 

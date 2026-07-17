@@ -32,7 +32,12 @@ public sealed interface MatchClause {
         return new Header(name, value);
     }
 
-    /** {@return a clause keeping only requests whose engine-resolved flow id is {@code flowId}} */
+    /**
+     * {@return a clause keeping only requests whose engine-resolved flow id is {@code flowId}}
+     *
+     * @throws IllegalArgumentException if {@code flowId} is blank — a blank id is never the default
+     *     flow but a distinct, silently-wrong partition, so it is rejected rather than sent verbatim
+     */
     static MatchClause flowId(String flowId) {
         return new FlowId(flowId);
     }
@@ -65,7 +70,7 @@ public sealed interface MatchClause {
     /** {@code match=flow_id=<Value>} */
     record FlowId(String value) implements MatchClause {
         public FlowId {
-            Objects.requireNonNull(value, "flow id");
+            FlowIds.require(value);
         }
     }
 }
