@@ -42,7 +42,12 @@ final class ScenariosImpl implements Scenarios {
 
     @Override
     public void setState(String name, String state) {
-        transport.setScenarioState(port, name, state);
+        transport.setScenarioState(port, name, state, Optional.empty());
+    }
+
+    @Override
+    public void setState(String name, String state, String flowId) {
+        transport.setScenarioState(port, name, state, Optional.of(flowId));
     }
 
     @Override

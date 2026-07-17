@@ -141,7 +141,13 @@ public interface RiftTransport extends AutoCloseable {
 
     JsonValue scenarios(int port, Optional<String> flowId);
 
-    void setScenarioState(int port, String name, String state);
+    /**
+     * Forces the named scenario into {@code state}. {@code flowId} scopes the write to a single
+     * flow/space; {@link Optional#empty()} targets the imposter's default flow. The engine partitions
+     * scenario state by {@code (flowId, name)}, so this is the write mirror of
+     * {@link #scenarios(int, Optional)}.
+     */
+    void setScenarioState(int port, String name, String state, Optional<String> flowId);
 
     void resetScenarios(int port);
 

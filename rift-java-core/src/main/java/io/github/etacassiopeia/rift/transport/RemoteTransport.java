@@ -284,8 +284,12 @@ public final class RemoteTransport implements RiftTransport {
     }
 
     @Override
-    public void setScenarioState(int port, String name, String state) {
-        String body = JsonObject.builder().put("state", new JsonString(state)).build().toJson();
+    public void setScenarioState(int port, String name, String state, Optional<String> flowId) {
+        String body = JsonObject.builder()
+                .put("state", new JsonString(state))
+                .putIfPresent("flowId", flowId.map(JsonString::new))
+                .build()
+                .toJson();
         executeVoid("PUT", "/imposters/" + port + "/scenarios/" + enc(name) + "/state", body, OptionalInt.of(port));
     }
 

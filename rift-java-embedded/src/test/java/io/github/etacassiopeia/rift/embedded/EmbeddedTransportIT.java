@@ -196,7 +196,8 @@ class EmbeddedTransportIT {
             t.disable(port);
             t.enable(port);
             assertNotNull(t.scenarios(port, Optional.empty()));
-            t.setScenarioState(port, "s1", "open");
+            t.setScenarioState(port, "s1", "open", Optional.empty());
+            t.setScenarioState(port, "s1", "open", Optional.of("flow-1"));
             t.resetScenarios(port);
             t.clearRecorded(port);
             t.clearProxyResponses(port);

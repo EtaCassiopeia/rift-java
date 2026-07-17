@@ -18,6 +18,7 @@ import static io.github.etacassiopeia.rift.dsl.RiftDsl.imposter;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.ok;
 import static io.github.etacassiopeia.rift.dsl.RiftDsl.onGet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Exercises the transport surface beyond the error-mapping gate: stubs, scenarios, spaces, flow-state
@@ -89,6 +90,31 @@ class RemoteTransportCoverageTest {
             }
             assertTrue(hit(s, "PUT", "/imposters/4545/scenarios/cart/state"));
             assertTrue(hit(s, "POST", "/imposters/4545/scenarios/reset"));
+        }
+    }
+
+    @Test
+    void scenariosSetStateFlowScoped() {
+        try (FakeAdminServer s = new FakeAdminServer()) {
+            s.respond("PUT /imposters/4545/scenarios/cart/state", 200, "{}");
+            try (Rift rift = connect(s)) {
+                Imposter imp = created(s, rift);
+                imp.scenarios().setState("cart", "filled", "flow-1");
+                imp.scenarios().setState("cart", "empty");
+            }
+            List<String> bodies = s.received().stream()
+                    .filter(r -> r.method().equals("PUT")
+                            && r.path().equals("/imposters/4545/scenarios/cart/state"))
+                    .map(FakeAdminServer.Received::body)
+                    .toList();
+            assertEquals(2, bodies.size());
+            // Flow-scoped write carries flowId in the PUT body alongside state.
+            assertTrue(bodies.get(0).contains("\"flowId\":\"flow-1\""), bodies.get(0));
+            assertTrue(bodies.get(0).contains("\"state\":\"filled\""), bodies.get(0));
+            // Default (flowId-less) write must NOT emit a flowId field — the engine falls back to
+            // the imposter's default flow, so a stray flowId would silently retarget the write.
+            assertFalse(bodies.get(1).contains("flowId"), bodies.get(1));
+            assertTrue(bodies.get(1).contains("\"state\":\"empty\""), bodies.get(1));
         }
     }
 
