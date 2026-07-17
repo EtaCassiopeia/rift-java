@@ -210,7 +210,7 @@ public interface RiftTransport extends AutoCloseable {
   void enable(int port);  void disable(int port);
   // scenarios
   JsonValue scenarios(int port, Optional<String> flowId);
-  void setScenarioState(int port, String name, String state);
+  void setScenarioState(int port, String name, String state, Optional<String> flowId);
   void resetScenarios(int port);
   // flow state
   Optional<JsonValue> flowStateGet(int port, String flowId, String key);
@@ -324,6 +324,7 @@ public interface Scenarios {
   List<State> list(String flowId);            // space-scoped FSM state
   String state(String name);
   void setState(String name, String state);
+  void setState(String name, String state, String flowId);  // space-scoped FSM write
   void reset();
 }
 

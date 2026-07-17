@@ -201,9 +201,18 @@ final class FfiCalls {
         }
     }
 
-    void setScenarioState(int port, String name, String state) {
+    /** Builds the {@code rift_set_scenario_state} payload {@code {"state","flowId"?}} (flowId omitted → default flow). */
+    static String scenarioStateBody(String state, Optional<String> flowId) {
+        return JsonObject.builder()
+                .put("state", new JsonString(state))
+                .putIfPresent("flowId", flowId.map(JsonString::new))
+                .build()
+                .toJson();
+    }
+
+    void setScenarioState(int port, String name, String state, Optional<String> flowId) {
         ensureLive();
-        String stateJson = JsonObject.builder().put("state", new JsonString(state)).build().toJson();
+        String stateJson = scenarioStateBody(state, flowId);
         try (Arena args = Arena.ofConfined()) {
             int rc = ffi.setScenarioState(handle, port, FfmCompat.allocateCString(args, name),
                     FfmCompat.allocateCString(args, stateJson));

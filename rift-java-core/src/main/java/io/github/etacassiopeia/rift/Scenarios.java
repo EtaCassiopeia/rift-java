@@ -18,8 +18,11 @@ public interface Scenarios {
     /** The current state of the named scenario. */
     String state(String name);
 
-    /** Forces the named scenario into {@code state}. */
+    /** Forces the named scenario into {@code state} on the imposter's default flow. */
     void setState(String name, String state);
+
+    /** Forces the named scenario into {@code state}, scoped to a single {@code flowId}/space. */
+    void setState(String name, String state, String flowId);
 
     /** Resets every scenario on this imposter back to its initial state. */
     void reset();

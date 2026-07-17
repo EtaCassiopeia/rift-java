@@ -160,8 +160,8 @@ public final class EmbeddedTransport implements RiftTransport {
     }
 
     @Override
-    public void setScenarioState(int port, String name, String state) {
-        calls.setScenarioState(port, name, state);
+    public void setScenarioState(int port, String name, String state, Optional<String> flowId) {
+        calls.setScenarioState(port, name, state, flowId);
     }
 
     @Override
