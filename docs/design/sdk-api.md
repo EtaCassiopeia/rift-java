@@ -595,6 +595,16 @@ Canonical tail: `recordedPage()` once, then `recordedSince(nextIndex)` on an int
 cursor each time and re-baselining on `truncated`. Server-side `match=` filtering composes with the
 cursor via additive overloads — see #138.
 
+`Space.recordedPage(filters...)` / `Space.recordedSince(cursor, filters...)` (#149) are the same
+cursor scoped to one flow: the SDK prepends the space's `flow_id` clause to the caller's filters
+and delegates to the same transport read. The index stays the **imposter's** journal index — a
+space cursor and an imposter cursor are the same number and interchangeable, and a space tail's
+cursor advances even while only *other* flows record (the engine advances past filter-rejected
+entries). A caller-supplied `flow_id` clause is rejected with `IllegalArgumentException`: clauses
+AND, so a second `flow_id` either duplicates the scope or silently selects nothing. Because the
+`flow_id` clause is always present, every space cursor call is a *filtered* read — on a transport
+without server-side filtering (FFI) it refuses per §8.2 rather than widening.
+
 Transport SPI: `RiftTransport.recordedSince(port, OptionalLong, List<MatchClause>)` returns the raw
 `RecordedSlice{requests, nextIndex, truncated}`. Its **default** serves the full list with an empty
 cursor, which is exactly what a cursor-less engine does — so the in-process FFI transport, which has
@@ -616,7 +626,7 @@ public sealed interface MatchClause {
 | What | Mountebank predicate set | journal/stream filter clause |
 | Evaluated by | the engine's predicate engine, via `POST /verify` | the engine's journal filter, via `match=` |
 | Grammar | full — `equals`/`contains`/`matches`/`jsonPath`/`xpath`/`and`/`or`/`not` | closed — header equality, flow-id equality |
-| Used for | `verify(match, times)`, `recorded(match)` (client-side filter) | `recordedPage`/`recordedSince`/`clearRecorded` filters, `/events?match=` (#131) |
+| Used for | `verify(match, times)`, `recorded(match)` (client-side filter) | `recordedPage`/`recordedSince`/`clearRecorded` filters, `Space.recordedPage`/`recordedSince` (auto-injected `flow_id`, #149), `/events?match=` (#131) |
 
 The grammar is closed because the engine's is: it rejects a clause it cannot parse with a 400 rather
 than serving everything, since a filter that silently widened would cross-contaminate correlated

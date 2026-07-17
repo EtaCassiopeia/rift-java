@@ -17,6 +17,7 @@ import io.github.etacassiopeia.rift.verify.VerifyDetail;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 final class SpaceImpl implements Space {
 
@@ -57,13 +58,53 @@ final class SpaceImpl implements Space {
 
     @Override
     public List<RecordedRequest> recorded() {
-        return RecordedRequests.readAll(transport.spaceRecorded(port, flowId),
-                "savedRequests?match=flow_id=" + flowId);
+        return RecordedRequests.readAll(transport.spaceRecorded(port, flowId), journalContext());
     }
 
     @Override
     public List<RecordedRequest> recorded(RequestMatch match) {
         return recorded().stream().filter(r -> PredicateEvaluator.matches(r, match.predicates())).toList();
+    }
+
+    @Override
+    public RecordedPage recordedPage(MatchClause... filters) {
+        return page(transport.recordedSince(port, OptionalLong.empty(), scoped(filters)));
+    }
+
+    @Override
+    public RecordedPage recordedSince(long cursor, MatchClause... filters) {
+        return page(transport.recordedSince(port, OptionalLong.of(cursor), scoped(filters)));
+    }
+
+    /**
+     * The space's {@code flow_id} clause first, then the caller's filters. A caller-supplied
+     * {@code flow_id} is rejected up front: clauses AND server-side, so a second one either
+     * duplicates the scope or silently selects nothing — and silent-empty is the loss mode the
+     * cursor API exists to remove.
+     */
+    private List<MatchClause> scoped(MatchClause[] filters) {
+        List<MatchClause> clauses = new ArrayList<>(filters.length + 1);
+        clauses.add(MatchClause.flowId(flowId));
+        for (MatchClause filter : List.of(filters)) {
+            if (filter instanceof MatchClause.FlowId) {
+                throw new IllegalArgumentException(
+                        "this space already scopes its reads to flow_id=" + flowId
+                                + "; clauses AND together, so a second flow_id clause either duplicates it"
+                                + " or silently selects nothing");
+            }
+            clauses.add(filter);
+        }
+        return clauses;
+    }
+
+    private RecordedPage page(RiftTransport.RecordedSlice slice) {
+        return new RecordedPage(RecordedRequests.readAll(slice.requests(), journalContext()),
+                slice.nextIndex(), slice.truncated());
+    }
+
+    /** The diagnostic context for journal reads — the route shape this space's traffic rides on. */
+    private String journalContext() {
+        return "savedRequests?match=flow_id=" + flowId;
     }
 
     @Override
