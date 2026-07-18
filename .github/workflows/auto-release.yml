@@ -1,0 +1,142 @@
+# Closes the full-auto dependency loop: when CI passes on an engine bump PR (opened by
+# `engine-bump.yml`), squash-merge it and cut the next release by pushing a version tag.
+#
+# Triggered by the *conclusion* of the CI workflow (workflow_run), so it observes the real, aggregate
+# result — success only if the whole matrix (JDK 17/21/22 × ubuntu/macos/windows, incl. the
+# conformance lanes) passes. A red CI run does nothing here: the bump PR stays open for a human. That
+# is the intended fail-to-human path.
+#
+# Guarded to act ONLY on a successful, PR-triggered CI run whose head is a `chore/engine-*` branch in
+# THIS repo (never a fork).
+#
+# WHY A TOKEN (unlike rift-scala/rift-node, which publish inline): rift-java releases run through
+# `publish.yml`, a tag-triggered dual-embedded pipeline (JDK-21 reactor + JDK-22 toolchain,
+# -DdualEmbedded, versions:set from the tag, GitHub Release, then a snapshot bump). Reproducing that
+# inline would be fragile, so this job just pushes the `vX.Y.Z` tag and lets `publish.yml` do the
+# deploy. GitHub's default GITHUB_TOKEN deliberately does NOT trigger a workflow from a pushed tag, so
+# the tag is pushed with a `RELEASE_TOKEN` secret (a PAT / fine-grained token with contents:write +
+# workflows). Until that secret exists, this job fails loudly BEFORE merging — bump PRs still open and
+# run CI, but nothing merges or publishes. Adding RELEASE_TOKEN arms the loop.
+#
+# The release version is the root pom's current `-SNAPSHOT` base (e.g. 0.1.3-SNAPSHOT -> 0.1.3), the
+# Maven-idiomatic "version master is heading toward"; `publish.yml` advances the snapshot afterward.
+
+name: Auto-release on green bump
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  auto-release:
+    name: Merge bump PR and cut a release tag
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'chore/engine-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out master
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Require RELEASE_TOKEN before touching anything
+        shell: bash
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_TOKEN}" ]; then
+            echo "::error::RELEASE_TOKEN secret is not set. The auto-release loop is unarmed: a bump PR"
+            echo "::error::cannot be merged/published because a tag pushed by GITHUB_TOKEN would not"
+            echo "::error::trigger publish.yml. Add a RELEASE_TOKEN repo secret (PAT/fine-grained with"
+            echo "::error::contents:write + workflows) to arm the loop. The bump PR is left open."
+            exit 1
+          fi
+          echo "RELEASE_TOKEN present — loop armed."
+
+      - name: Merge the bump PR
+        id: merge
+        shell: bash
+        env:
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          PR="$(gh pr list --repo "${{ github.repository }}" --head "${BRANCH}" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "${PR}" ]; then
+            echo "No open PR for ${BRANCH} (already merged, or closed). Nothing to do."
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Squash-merging PR #${PR} (${BRANCH})."
+          gh pr merge "${PR}" --repo "${{ github.repository }}" --squash --delete-branch
+          echo "merged=true" >> "$GITHUB_OUTPUT"
+
+      - name: Compute the release version from the pom -SNAPSHOT
+        id: ver
+        if: steps.merge.outputs.merged == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # The squash-merge advanced master on the remote; move to its new HEAD before reading the pom
+          # and tagging, so the release points at the merge commit.
+          git fetch origin "${{ github.event.repository.default_branch }}"
+          git reset --hard FETCH_HEAD
+          git fetch --tags --force
+
+          # The root pom's project version is the first <version> in the file.
+          POM_VERSION="$(grep -m1 -oP '(?<=<version>)[^<]+' pom.xml)"
+          case "${POM_VERSION}" in
+            *-SNAPSHOT) : ;;
+            *)
+              echo "::error::Root pom version '${POM_VERSION}' is not a -SNAPSHOT; refusing to guess a release version."
+              exit 1
+              ;;
+          esac
+          RELEASE="${POM_VERSION%-SNAPSHOT}"
+          if ! printf '%s' "${RELEASE}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Derived release version '${RELEASE}' is not a plain MAJOR.MINOR.PATCH."
+            exit 1
+          fi
+
+          TAG="v${RELEASE}"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null || git ls-remote --exit-code --tags origin "${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists; nothing to publish (idempotent no-op)."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "pom ${POM_VERSION} -> release ${RELEASE} (tag ${TAG})."
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Tag the merge commit (triggers publish.yml via RELEASE_TOKEN)
+        if: steps.ver.outputs.publish == 'true'
+        shell: bash
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Release ${TAG} (auto-cut after engine bump)"
+
+          # Pushed with RELEASE_TOKEN (not GITHUB_TOKEN) so publish.yml's `on: push: tags: ['v*']`
+          # actually fires: it stamps the version from the tag, deploys the dual-embedded reactor to
+          # Central, creates the GitHub Release, and advances master's -SNAPSHOT. The token is passed
+          # in the remote URL via env (GitHub Actions masks secrets in logs).
+          git push "https://x-access-token:${RELEASE_TOKEN}@github.com/${{ github.repository }}.git" "refs/tags/${TAG}"
+          echo "Pushed ${TAG}; publish.yml will deploy it and bump the snapshot."
