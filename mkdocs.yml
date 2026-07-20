@@ -1,8 +1,8 @@
 site_name: rift-java
 site_description: Official Java SDK for Rift — a Mountebank-compatible HTTP/HTTPS mock server
-site_url: https://etacassiopeia.github.io/rift-java/
-repo_url: https://github.com/EtaCassiopeia/rift-java
-repo_name: EtaCassiopeia/rift-java
+site_url: https://achird-labs.github.io/rift-java/
+repo_url: https://github.com/achird-labs/rift-java
+repo_name: achird-labs/rift-java
 docs_dir: docs
 theme:
   name: material

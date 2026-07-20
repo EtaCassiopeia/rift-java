@@ -15,7 +15,7 @@
 set -euo pipefail
 
 PIN_FILE="pom.xml"
-RIFT_CONTAINER_TEST="rift-java-testcontainers/src/test/java/io/github/etacassiopeia/rift/testcontainers/RiftContainerTest.java"
+RIFT_CONTAINER_TEST="rift-java-testcontainers/src/test/java/io/github/achirdlabs/rift/testcontainers/RiftContainerTest.java"
 CONFORMANCE_README="rift-java-conformance/README.md"
 
 current() {

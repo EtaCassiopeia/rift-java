@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>io.github.etacassiopeia</groupId>
+    <groupId>io.github.achird-labs</groupId>
     <artifactId>rift-java-parent</artifactId>
     <version>0.1.3-SNAPSHOT</version>
   </parent>
@@ -13,11 +13,11 @@
   <artifactId>rift-java-junit5</artifactId>
   <name>rift-java-junit5</name>
   <description>JUnit 5 extension for rift-java: @RiftTest engine scoping and imposter injection.</description>
-  <url>https://github.com/EtaCassiopeia/rift-java</url>
+  <url>https://github.com/achird-labs/rift-java</url>
 
   <dependencies>
     <dependency>
-      <groupId>io.github.etacassiopeia</groupId>
+      <groupId>io.github.achird-labs</groupId>
       <artifactId>rift-java-core</artifactId>
     </dependency>
     <dependency>

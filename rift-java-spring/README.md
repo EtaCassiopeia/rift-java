@@ -6,10 +6,10 @@ publishes their URI/port as environment properties, and `@InjectImposter`/`@Inje
 them into test fields. Spring is a `provided` dependency — bring your own Spring Boot version.
 
 ```java
-import io.github.etacassiopeia.rift.Imposter;
-import io.github.etacassiopeia.rift.spring.*;
+import io.github.achirdlabs.rift.Imposter;
+import io.github.achirdlabs.rift.spring.*;
 import org.springframework.boot.test.context.SpringBootTest;
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
 
 @SpringBootTest
 @EnableRift
@@ -29,7 +29,7 @@ class UserClientTest {
 
 ```xml
 <dependency>
-  <groupId>io.github.etacassiopeia</groupId>
+  <groupId>io.github.achird-labs</groupId>
   <artifactId>rift-java-spring</artifactId>
   <scope>test</scope>
 </dependency>

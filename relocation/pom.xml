@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Relocation stubs for the pre-org-move coordinates.
+
+  rift-java 0.1.0-0.1.2 shipped under groupId io.github.etacassiopeia. From 0.1.3
+  onward it ships under io.github.achird-labs. Without these stubs, anyone who
+  bumps their existing io.github.etacassiopeia dependency to 0.1.3 gets a bare
+  "could not resolve" with no hint that the artifact simply moved.
+
+  Each module here publishes a pom-only artifact under the OLD coordinates at
+  0.1.3 whose <distributionManagement><relocation> points at the new ones. Maven,
+  Gradle and coursier all read that and resolve the new artifact, emitting a
+  warning naming the new coordinates.
+
+  This is NOT part of the main reactor - the root pom's <modules> deliberately
+  omits it. It is a one-shot publish, run once, immediately after 0.1.3 goes out
+  under the new groupId (the relocation target must already exist on Central, or
+  consumers get relocated to something that 404s):
+
+      mvn -f relocation/pom.xml -Prelease deploy
+
+  It needs credentials for the io.github.etacassiopeia namespace, not the new
+  one. Do not bump these versions again - a single relocation at the boundary
+  version is the whole mechanism. Anyone still pinned at 0.1.2 or lower is
+  unaffected; those artifacts remain exactly where they were.
+
+  Note this pom is both the aggregator and its own relocation stub, because
+  rift-java-parent is itself a published artifact that needs relocating. Parent
+  resolution does not follow <relocation>, so it still works as the children's
+  parent.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.github.etacassiopeia</groupId>
+  <artifactId>rift-java-parent</artifactId>
+  <version>0.1.3</version>
+  <packaging>pom</packaging>
+
+  <name>rift-java (parent) [relocated]</name>
+  <description>Relocated to io.github.achird-labs:rift-java-parent.</description>
+  <url>https://github.com/achird-labs/rift-java</url>
+  <inceptionYear>2026</inceptionYear>
+
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <id>EtaCassiopeia</id>
+      <name>Mohsen Zainalpour</name>
+      <url>https://github.com/EtaCassiopeia</url>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/achird-labs/rift-java.git</connection>
+    <developerConnection>scm:git:git@github.com:achird-labs/rift-java.git</developerConnection>
+    <url>https://github.com/achird-labs/rift-java</url>
+    <tag>HEAD</tag>
+  </scm>
+
+  <distributionManagement>
+    <relocation>
+      <groupId>io.github.achird-labs</groupId>
+      <artifactId>rift-java-parent</artifactId>
+      <version>0.1.3</version>
+      <message>rift-java moved to the achird-labs org: groupId is now io.github.achird-labs, and packages are now io.github.achirdlabs.rift.*</message>
+    </relocation>
+  </distributionManagement>
+
+  <modules>
+    <module>rift-java-core</module>
+    <module>rift-java-jackson</module>
+    <module>rift-java-junit5</module>
+    <module>rift-java-natives</module>
+    <module>rift-java-spring</module>
+    <module>rift-java-testcontainers</module>
+    <module>rift-java-embedded</module>
+    <module>rift-java-embedded-jdk21</module>
+    <module>rift-java-bom</module>
+  </modules>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
+    <central-publishing-plugin.version>0.8.0</central-publishing-plugin.version>
+  </properties>
+
+  <profiles>
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <!-- pom packaging needs no sources/javadoc jars, so unlike the main build this
+               profile carries signing and publishing only. -->
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>${maven-gpg-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+              </execution>
+            </executions>
+            <configuration>
+              <gpgArguments>
+                <arg>--pinentry-mode</arg>
+                <arg>loopback</arg>
+              </gpgArguments>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <version>${central-publishing-plugin.version}</version>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+              <deploymentName>rift-java ${project.version} (relocation to io.github.achird-labs)</deploymentName>
+              <autoPublish>true</autoPublish>
+              <waitUntil>validated</waitUntil>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

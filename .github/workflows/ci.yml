@@ -132,7 +132,7 @@ jobs:
           # ${RUNNER_TEMP} path on Windows starts with a drive letter (D:\...), which GNU tar in Git
           # bash parses as a host:path remote spec ("Cannot connect to D") and fails the whole lane.
           curl -fsSL -o rift-java-conformance/target/sdk-conformance.tar.gz \
-            "https://github.com/EtaCassiopeia/rift/releases/download/v${VER}/sdk-conformance-v${VER}.tar.gz"
+            "https://github.com/achird-labs/rift/releases/download/v${VER}/sdk-conformance-v${VER}.tar.gz"
           tar -xzf rift-java-conformance/target/sdk-conformance.tar.gz -C rift-java-conformance/target/corpus
           # Point at the parent dir; Corpus.descend() resolves the single extracted sdk-conformance-* child,
           # so this survives a change to the tarball's top-level directory name.
@@ -151,7 +151,7 @@ jobs:
             *) echo "no librift_ffi asset for ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
           esac
           curl -fsSL -o "${RUNNER_TEMP}/${ASSET}" \
-            "https://github.com/EtaCassiopeia/rift/releases/download/v${VER}/${ASSET}"
+            "https://github.com/achird-labs/rift/releases/download/v${VER}/${ASSET}"
           echo "RIFT_FFI_LIB=${RUNNER_TEMP}/${ASSET}" >> "$GITHUB_ENV"
       - name: Replay the corpus over the ${{ matrix.lane.transport }} transport
         shell: bash

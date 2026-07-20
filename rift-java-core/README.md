@@ -6,7 +6,7 @@ and request verification. `rift-java-embedded` (in-process transport) and the JS
 only pieces that live outside this module.
 
 ```java
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
 
 try (Rift rift = Rift.connect(URI.create("http://localhost:2525"))) {
     Imposter users = rift.create(
@@ -20,9 +20,9 @@ try (Rift rift = Rift.connect(URI.create("http://localhost:2525"))) {
 
 What's in here:
 
-- **Wire model** (`io.github.etacassiopeia.rift.model`) — typed request/response/predicate/stub
+- **Wire model** (`io.github.achirdlabs.rift.model`) — typed request/response/predicate/stub
   shapes plus a hand-rolled, dependency-free JSON codec.
-- **DSL** (`io.github.etacassiopeia.rift.dsl.RiftDsl`) — `imposter`/`onGet`/`onPost`/...,
+- **DSL** (`io.github.achirdlabs.rift.dsl.RiftDsl`) — `imposter`/`onGet`/`onPost`/...,
   matchers (`equalTo`, `contains`, `matches`, ...), response builders (`ok`, `okJson`, `status`,
   `proxyTo`, `fault`, ...), and verification helpers (`times`, `atLeast`, `never`, ...).
 - **Transports** — `Rift.connect(uri)` against a running admin API, `Rift.spawn()` to launch and

@@ -1,13 +1,13 @@
 # rift-java
 
-Official Java SDK for [Rift](https://github.com/EtaCassiopeia/rift) — a high-performance,
+Official Java SDK for [Rift](https://github.com/achird-labs/rift) — a high-performance,
 Mountebank-compatible HTTP/HTTPS mock server written in Rust.
 
-📖 **Documentation site: [etacassiopeia.github.io/rift-java](https://etacassiopeia.github.io/rift-java/)**
+📖 **Documentation site: [achird-labs.github.io/rift-java](https://achird-labs.github.io/rift-java/)**
 
 > **Available on Maven Central.** The current release is **0.1.2** under the
-> `io.github.etacassiopeia` group ID. The public API is documented on the
-> [docs site](https://etacassiopeia.github.io/rift-java/) and
+> `io.github.achird-labs` group ID. The public API is documented on the
+> [docs site](https://achird-labs.github.io/rift-java/) and
 > [docs/design/sdk-api.md](docs/design/sdk-api.md). Stable releases go to Maven Central on each
 > `vX.Y.Z` tag; development **snapshots** publish to the Central Portal snapshots repository on
 > every commit to `master`. See [Installation](#installation) to add it to your build.
@@ -15,7 +15,7 @@ Mountebank-compatible HTTP/HTTPS mock server written in Rust.
 ## What it looks like
 
 ```java
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
 
 try (Rift rift = Rift.embedded()) {                  // or Rift.connect(uri) / Rift.spawn()
     Imposter users = rift.create(
@@ -51,7 +51,7 @@ verification, and TLS-MITM intercept with truststore/`SSLContext` helpers.
 
 ## Installation
 
-rift-java is published under the `io.github.etacassiopeia` group ID, on two channels:
+rift-java is published under the `io.github.achird-labs` group ID, on two channels:
 
 | Channel | Repository | Version form | Use for |
 |---|---|---|---|
@@ -71,7 +71,7 @@ per-module `<version>`:
 <dependencyManagement>
   <dependencies>
     <dependency>
-      <groupId>io.github.etacassiopeia</groupId>
+      <groupId>io.github.achird-labs</groupId>
       <artifactId>rift-java-bom</artifactId>
       <version>0.1.2</version> <!-- or X.Y.Z-SNAPSHOT for the latest master -->
       <type>pom</type>
@@ -82,12 +82,12 @@ per-module `<version>`:
 
 <dependencies>
   <dependency>
-    <groupId>io.github.etacassiopeia</groupId>
+    <groupId>io.github.achird-labs</groupId>
     <artifactId>rift-java-core</artifactId>
     <scope>test</scope>
   </dependency>
   <dependency>
-    <groupId>io.github.etacassiopeia</groupId>
+    <groupId>io.github.achird-labs</groupId>
     <artifactId>rift-java-junit5</artifactId>
     <scope>test</scope>
   </dependency>
@@ -122,9 +122,9 @@ repositories {
 }
 
 dependencies {
-    testImplementation(platform("io.github.etacassiopeia:rift-java-bom:0.1.2")) // or X.Y.Z-SNAPSHOT for the latest master
-    testImplementation("io.github.etacassiopeia:rift-java-core")
-    testImplementation("io.github.etacassiopeia:rift-java-junit5")
+    testImplementation(platform("io.github.achird-labs:rift-java-bom:0.1.2")) // or X.Y.Z-SNAPSHOT for the latest master
+    testImplementation("io.github.achird-labs:rift-java-core")
+    testImplementation("io.github.achird-labs:rift-java-junit5")
 }
 ```
 
@@ -154,7 +154,7 @@ dependencies {
 > see the [BOM README](rift-java-bom/README.md#picking-a-natives-classifier-automatically-os-maven-plugin).
 
 ```java
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
 
 try (Rift rift = Rift.embedded()) {
     Imposter users = rift.create(
@@ -171,7 +171,7 @@ try (Rift rift = Rift.embedded()) {
 Against a running rift admin endpoint:
 
 ```java
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
 
 URI adminUri = URI.create("http://localhost:2525");
 try (Rift rift = Rift.connect(adminUri)) {
@@ -188,7 +188,7 @@ remapped ports), override `ConnectOptions.builder(adminUri).hostResolver(port ->
 ### Spawn
 
 ```java
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
 
 try (Rift rift = Rift.spawn()) {           // resolves (or downloads) and launches a rift binary
     Imposter users = rift.create(imposter("users").record());
@@ -206,8 +206,8 @@ not the compatibility floor — override with `SpawnOptions.builder().version("X
 ### JUnit 5
 
 ```java
-import io.github.etacassiopeia.rift.junit5.*;
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+import io.github.achirdlabs.rift.junit5.*;
+import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
 
 @RiftTest
 class UserClientTest {
@@ -228,8 +228,8 @@ See [docs/junit5.md](docs/junit5.md) for `Transport`/`Reset` semantics and paral
 ### Spring Boot
 
 ```java
-import io.github.etacassiopeia.rift.spring.*;
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+import io.github.achirdlabs.rift.spring.*;
+import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
 
 @SpringBootTest
 @EnableRift

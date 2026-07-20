@@ -14,7 +14,7 @@ Import the BOM, then depend on whichever modules you need — no `<version>` req
 <dependencyManagement>
   <dependencies>
     <dependency>
-      <groupId>io.github.etacassiopeia</groupId>
+      <groupId>io.github.achird-labs</groupId>
       <artifactId>rift-java-bom</artifactId>
       <version>0.1.0-SNAPSHOT</version>
       <type>pom</type>
@@ -25,15 +25,15 @@ Import the BOM, then depend on whichever modules you need — no `<version>` req
 
 <dependencies>
   <dependency>
-    <groupId>io.github.etacassiopeia</groupId>
+    <groupId>io.github.achird-labs</groupId>
     <artifactId>rift-java-core</artifactId>
   </dependency>
   <dependency>
-    <groupId>io.github.etacassiopeia</groupId>
+    <groupId>io.github.achird-labs</groupId>
     <artifactId>rift-java-jackson</artifactId>
   </dependency>
   <dependency>
-    <groupId>io.github.etacassiopeia</groupId>
+    <groupId>io.github.achird-labs</groupId>
     <artifactId>rift-java-junit5</artifactId>
     <scope>test</scope>
   </dependency>
@@ -69,7 +69,7 @@ as a build extension and reference `${os.detected.classifier}`:
 
 <dependencies>
   <dependency>
-    <groupId>io.github.etacassiopeia</groupId>
+    <groupId>io.github.achird-labs</groupId>
     <artifactId>rift-java-natives</artifactId>
     <!-- Not ${os.detected.classifier}: that yields osx-/aarch_64 names which don't match our
          scheme. rift-natives.classifier is derived by the OS/arch profiles shown below. -->
@@ -138,7 +138,7 @@ per job:
 
 ```xml
 <dependency>
-  <groupId>io.github.etacassiopeia</groupId>
+  <groupId>io.github.achird-labs</groupId>
   <artifactId>rift-java-natives</artifactId>
   <classifier>linux-x86_64</classifier>
 </dependency>

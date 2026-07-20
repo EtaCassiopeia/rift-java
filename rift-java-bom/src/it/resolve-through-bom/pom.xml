@@ -17,7 +17,7 @@
   <dependencyManagement>
     <dependencies>
       <dependency>
-        <groupId>io.github.etacassiopeia</groupId>
+        <groupId>io.github.achird-labs</groupId>
         <artifactId>rift-java-bom</artifactId>
         <version>@project.version@</version>
         <type>pom</type>
@@ -30,20 +30,20 @@
     <!-- No <version> on any of these: if the BOM fails to manage one, the build fails with
          "dependencies.dependency.version is missing" — that failure IS the test. -->
     <dependency>
-      <groupId>io.github.etacassiopeia</groupId>
+      <groupId>io.github.achird-labs</groupId>
       <artifactId>rift-java-core</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.github.etacassiopeia</groupId>
+      <groupId>io.github.achird-labs</groupId>
       <artifactId>rift-java-jackson</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.github.etacassiopeia</groupId>
+      <groupId>io.github.achird-labs</groupId>
       <artifactId>rift-java-junit5</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>io.github.etacassiopeia</groupId>
+      <groupId>io.github.achird-labs</groupId>
       <artifactId>rift-java-spring</artifactId>
       <scope>test</scope>
     </dependency>
