@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Relocation stub. See ../pom.xml for what this is and how to publish it.
+  rift-java-testcontainers moved to io.github.achird-labs as of 0.1.3.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.etacassiopeia</groupId>
+    <artifactId>rift-java-parent</artifactId>
+    <version>0.1.3</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>rift-java-testcontainers</artifactId>
+  <packaging>pom</packaging>
+
+  <name>rift-java-testcontainers [relocated]</name>
+  <description>Relocated to io.github.achird-labs:rift-java-testcontainers. Testcontainers integration for rift-java: RiftContainer runs the rift proxy in Docker with the hostResolver seam wired for port mapping.</description>
+
+  <distributionManagement>
+    <relocation>
+      <groupId>io.github.achird-labs</groupId>
+      <artifactId>rift-java-testcontainers</artifactId>
+      <version>0.1.3</version>
+      <message>rift-java moved to the achird-labs org: groupId is now io.github.achird-labs, and packages are now io.github.achirdlabs.rift.*</message>
+    </relocation>
+  </distributionManagement>
+</project>

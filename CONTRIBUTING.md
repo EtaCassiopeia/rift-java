@@ -71,3 +71,21 @@ The `Publish` workflow is a no-op until these repository secrets are configured:
 `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD` (a Central Portal user token), `GPG_PRIVATE_KEY`,
 and `MAVEN_GPG_PASSPHRASE`. Signing and the sources/javadoc jars live in the `release` profile
 (`./mvnw -Prelease deploy`).
+
+### One-shot: the 0.1.3 relocation publish
+
+0.1.0-0.1.2 shipped under the old `io.github.etacassiopeia` groupId. `relocation/` holds
+pom-only stubs that redirect those coordinates at 0.1.3 to the new ones, so anyone who bumps
+an existing dependency gets a warning naming the new coordinates instead of an unresolvable
+artifact. It is deliberately **not** in the root reactor.
+
+Publish it **once, immediately after 0.1.3 is live** under the new groupId — the relocation
+target has to already exist on Central, or consumers get redirected to a 404:
+
+```sh
+mvn -f relocation/pom.xml -Prelease deploy
+```
+
+This needs Central credentials for the **old** `io.github.etacassiopeia` namespace, not the
+new one. Do not repeat it for later versions: one relocation at the boundary version is the
+whole mechanism, and anyone pinned at 0.1.2 or lower is unaffected.
