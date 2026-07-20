@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>io.github.etacassiopeia</groupId>
+    <groupId>io.github.achird-labs</groupId>
     <artifactId>rift-java-parent</artifactId>
     <version>0.1.3-SNAPSHOT</version>
   </parent>
@@ -13,14 +13,14 @@
   <artifactId>rift-java-natives</artifactId>
   <name>rift-java-natives</name>
   <description>Per-platform classifier jars bundling the librift_ffi cdylib. Version tracks the Rift engine.</description>
-  <url>https://github.com/EtaCassiopeia/rift-java</url>
+  <url>https://github.com/achird-labs/rift-java</url>
 
   <dependencies>
     <!-- Build-time only: NativesFetcher parses ffi-manifest.json with core's JSON codec. `provided`
          keeps it off the classifier jars' transitive graph — a consumer that just wants a cdylib
          must not drag in core. It stays on this module's own compile/test classpath. -->
     <dependency>
-      <groupId>io.github.etacassiopeia</groupId>
+      <groupId>io.github.achird-labs</groupId>
       <artifactId>rift-java-core</artifactId>
       <scope>provided</scope>
     </dependency>
@@ -51,7 +51,7 @@
                   <goal>java</goal>
                 </goals>
                 <configuration>
-                  <mainClass>io.github.etacassiopeia.rift.natives.NativesFetcher</mainClass>
+                  <mainClass>io.github.achirdlabs.rift.natives.NativesFetcher</mainClass>
                   <!-- exec:java runs in the Maven JVM: blockSystemExit rewrites NativesFetcher's
                        System.exit(1) into a goal failure instead of killing the whole reactor. -->
                   <blockSystemExit>true</blockSystemExit>

@@ -19,7 +19,7 @@ on:
   workflow_call:
     inputs:
       upstream_repo:
-        description: "owner/repo whose latest release drives the bump (e.g. EtaCassiopeia/rift)"
+        description: "owner/repo whose latest release drives the bump (e.g. achird-labs/rift)"
         type: string
         required: true
       branch_prefix:

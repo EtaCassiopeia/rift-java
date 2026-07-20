@@ -1,6 +1,6 @@
 # Contributing to rift-java
 
-Thanks for helping build the official Java SDK for [Rift](https://github.com/EtaCassiopeia/rift).
+Thanks for helping build the official Java SDK for [Rift](https://github.com/achird-labs/rift).
 
 ## Prerequisites
 
@@ -61,7 +61,7 @@ You never need to pass a profile by hand for a normal build.
 
 ## Releasing
 
-Artifacts publish to Maven Central under the `io.github.etacassiopeia` namespace via the
+Artifacts publish to Maven Central under the `io.github.achird-labs` namespace via the
 [Central Publishing plugin](https://central.sonatype.org/publish/publish-portal-maven/).
 
 - **Snapshots** deploy automatically from `master` (`0.1.0-SNAPSHOT`).

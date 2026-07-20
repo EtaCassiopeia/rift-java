@@ -1,8 +1,8 @@
 # Keeps <rift.engine.version> (and its drift-catcher literals) in sync with the latest
-# EtaCassiopeia/rift release. Thin caller of the reusable dep-bump scaffold — all the invariant logic
+# achird-labs/rift release. Thin caller of the reusable dep-bump scaffold — all the invariant logic
 # (poll / compare / idempotent branch+PR / injection-safe changelog / dry-run) lives in
 # ./.github/workflows/dep-bump.yml, and all the rift-java-specific edits live in scripts/bump.sh. A
-# real "chore/engine-<version>" PR only appears when EtaCassiopeia/rift has published a newer release.
+# real "chore/engine-<version>" PR only appears when achird-labs/rift has published a newer release.
 
 name: Engine Bump
 
@@ -25,7 +25,7 @@ jobs:
   bump:
     uses: ./.github/workflows/dep-bump.yml
     with:
-      upstream_repo: EtaCassiopeia/rift
+      upstream_repo: achird-labs/rift
       branch_prefix: chore/engine-
       dep_name: rift engine
       dry_run: ${{ github.event.inputs.dry_run == 'true' }}

@@ -3,7 +3,7 @@ name: Publish
 # Releases happen ONLY by pushing a version tag (vX.Y.Z) — mirroring zio-bdd. A push to master
 # publishes the -SNAPSHOT instead, which the central-publishing plugin routes to the Central Portal
 # snapshots repo (https://central.sonatype.com/repository/maven-snapshots/); SNAPSHOT publishing is
-# enabled for the io.github.etacassiopeia namespace in the Portal.
+# enabled for the io.github.achird-labs namespace in the Portal.
 on:
   push:
     branches: [master]
@@ -15,7 +15,7 @@ jobs:
     name: Publish to Maven Central
     runs-on: ubuntu-latest
     # Only the canonical repo publishes; forks build via CI but never deploy.
-    if: github.repository == 'EtaCassiopeia/rift-java'
+    if: github.repository == 'achird-labs/rift-java'
     permissions:
       contents: write # create the GitHub Release object on a tag
     steps:
@@ -127,7 +127,7 @@ jobs:
     name: Advance the development version
     needs: publish
     # Only on a FINAL release tag; a pre-release (v1.2.0-RC1) must not push the dev line past 1.2.0.
-    if: github.repository == 'EtaCassiopeia/rift-java' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    if: github.repository == 'achird-labs/rift-java' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
     runs-on: ubuntu-latest
     permissions:
       contents: write

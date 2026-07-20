@@ -199,7 +199,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -keyout ca-key.pem -out ca-cert.pem \
 **2. The interceptor loads that committed CA on a fixed, container-reachable port:**
 
 ```java
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
 
 Intercept intercept = rift.intercept(InterceptOptions.builder()
         .host("0.0.0.0")               // reachable from the container, not just loopback

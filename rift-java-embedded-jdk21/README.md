@@ -10,7 +10,7 @@ renamed between JDK 21 preview and JDK 22 stable are resolved reflectively at cl
 > `rift-java-embedded` and drop this dependency.
 
 > **Depend on exactly one** of `rift-java-embedded` or `rift-java-embedded-jdk21` — never both on the
-> same classpath. They publish the same classes (`io.github.etacassiopeia.rift.embedded.*`); with both
+> same classpath. They publish the same classes (`io.github.achirdlabs.rift.embedded.*`); with both
 > present the JVM loads whichever comes first, and a JDK 21 preview class on a JDK 22+ runtime fails to
 > load. The BOM does not manage both together for this reason.
 

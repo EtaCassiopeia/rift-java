@@ -7,12 +7,12 @@ Optional Jackson-backed implementation of `rift-java-core`'s `RiftBodyCodec` SPI
 
 `rift-java-core` ships no codec implementation — it stays zero-runtime-deps and discovers one via
 `ServiceLoader`. Adding this module's jar to the classpath is enough; it registers
-`JacksonBodyCodec` under `META-INF/services/io.github.etacassiopeia.rift.codec.RiftBodyCodec` and
+`JacksonBodyCodec` under `META-INF/services/io.github.achirdlabs.rift.codec.RiftBodyCodec` and
 it's picked up automatically, no further wiring required.
 
 ```xml
 <dependency>
-  <groupId>io.github.etacassiopeia</groupId>
+  <groupId>io.github.achird-labs</groupId>
   <artifactId>rift-java-jackson</artifactId>
 </dependency>
 ```

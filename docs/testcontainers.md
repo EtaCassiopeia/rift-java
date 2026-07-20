@@ -8,7 +8,7 @@ correct through Docker's port remapping — with zero user-side rewriting.
 
 ```xml
 <dependency>
-  <groupId>io.github.etacassiopeia</groupId>
+  <groupId>io.github.achird-labs</groupId>
   <artifactId>rift-java-testcontainers</artifactId>
   <scope>test</scope>
 </dependency>

@@ -2,7 +2,7 @@
 
 Status: **accepted design** — this document pins down the public API so implementation issues
 carry no open design decisions. Canonical location: `docs/design/sdk-api.md`; mirrored as
-issue #19. Sources: rift engine 0.12.0 (`EtaCassiopeia/rift`), C-ABI v2
+issue #19. Sources: rift engine 0.12.0 (`achird-labs/rift`), C-ABI v2
 (`librift_ffi`, `include/rift_ffi.h`), the rift-conformance corpus + Plane-B SPI, rift-node
 0.12.x (reference SDK), the rift-scala design issues (consumer of this SDK), and a DX benchmark
 of WireMock 3 / MockServer / Hoverfly / Testcontainers / wiremock-spring-boot.
@@ -52,17 +52,17 @@ Backlog modules (issues filed, not v1-blocking): `rift-java-testcontainers`
 ## 3. Package map (final)
 
 ```
-io.github.etacassiopeia.rift            Rift, Imposter, Space, FlowState, Scenarios, StubRef,
+io.github.achirdlabs.rift            Rift, Imposter, Space, FlowState, Scenarios, StubRef,
                                         RecordedRequest, EngineInfo, VerificationTimes,
                                         ConnectOptions, SpawnOptions, EmbeddedOptions,
                                         Intercept, InterceptOptions, InterceptTrust
-io.github.etacassiopeia.rift.error      RiftException (sealed) + 5 leaves, WireFormatException
-io.github.etacassiopeia.rift.verify     VerificationException, RequestMatch, PredicateEvaluator
-io.github.etacassiopeia.rift.model      wire records (ImposterDefinition, Stub, Predicate, …)
-io.github.etacassiopeia.rift.json       JsonValue + codec (unchanged)
-io.github.etacassiopeia.rift.dsl        RiftDsl + spec builders (unchanged home)
-io.github.etacassiopeia.rift.codec      RiftBodyCodec SPI
-io.github.etacassiopeia.rift.transport  internal SPI (RiftTransport, EmbeddedEngineProvider)
+io.github.achirdlabs.rift.error      RiftException (sealed) + 5 leaves, WireFormatException
+io.github.achirdlabs.rift.verify     VerificationException, RequestMatch, PredicateEvaluator
+io.github.achirdlabs.rift.model      wire records (ImposterDefinition, Stub, Predicate, …)
+io.github.achirdlabs.rift.json       JsonValue + codec (unchanged)
+io.github.achirdlabs.rift.dsl        RiftDsl + spec builders (unchanged home)
+io.github.achirdlabs.rift.codec      RiftBodyCodec SPI
+io.github.achirdlabs.rift.transport  internal SPI (RiftTransport, EmbeddedEngineProvider)
 ```
 
 ### 3.1 Naming decision: handle vs. definition
@@ -78,7 +78,7 @@ returns the record, closing the loop.
 ## 4. Error model (cross-SDK contract, sealed)
 
 ```java
-package io.github.etacassiopeia.rift.error;
+package io.github.achirdlabs.rift.error;
 
 public sealed class RiftException extends RuntimeException
     permits InvalidDefinition, EngineUnavailable, CommunicationError,
@@ -176,7 +176,7 @@ public final class EmbeddedOptions {
 Core defines:
 
 ```java
-package io.github.etacassiopeia.rift.transport;
+package io.github.achirdlabs.rift.transport;
 public interface EmbeddedEngineProvider {
   boolean isAvailable();                       // native lib resolvable for this OS/arch
   Rift start(EmbeddedOptions options);
@@ -191,7 +191,7 @@ entry-point class while preserving the JDK-17 core / JDK-22 embedded split.
 ### 5.3 Transport SPI (internal)
 
 ```java
-package io.github.etacassiopeia.rift.transport;
+package io.github.achirdlabs.rift.transport;
 public interface RiftTransport extends AutoCloseable {
   JsonValue createImposter(JsonValue definition);          // returns created definition (with port)
   JsonValue getImposter(int port);                         // ImposterNotFound on 404
@@ -768,7 +768,7 @@ Target ergonomics: the rift-java-demo ~30-line hand-rolled flow becomes ~8 lines
 ## 10. Body codec SPI (`rift-java-jackson` becomes real)
 
 ```java
-package io.github.etacassiopeia.rift.codec;
+package io.github.achirdlabs.rift.codec;
 public interface RiftBodyCodec {
   JsonValue toJson(Object value);
   <T> T fromJson(JsonValue json, Class<T> type);

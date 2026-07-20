@@ -5,10 +5,10 @@ JUnit 5 test integration: `@RiftTest` starts one `Rift` engine per test class, c
 via `@InjectImposter`/`@InjectRift`.
 
 ```java
-import io.github.etacassiopeia.rift.Imposter;
-import io.github.etacassiopeia.rift.dsl.ImposterSpec;
-import io.github.etacassiopeia.rift.junit5.*;
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+import io.github.achirdlabs.rift.Imposter;
+import io.github.achirdlabs.rift.dsl.ImposterSpec;
+import io.github.achirdlabs.rift.junit5.*;
+import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
 
 @RiftTest
 class UserClientTest {
@@ -28,7 +28,7 @@ class UserClientTest {
 
 ```xml
 <dependency>
-  <groupId>io.github.etacassiopeia</groupId>
+  <groupId>io.github.achird-labs</groupId>
   <artifactId>rift-java-junit5</artifactId>
   <scope>test</scope>
 </dependency>

@@ -1,6 +1,6 @@
 # rift-java
 
-Official Java SDK for [Rift](https://github.com/EtaCassiopeia/rift) — a high-performance,
+Official Java SDK for [Rift](https://github.com/achird-labs/rift) — a high-performance,
 Mountebank-compatible HTTP/HTTPS mock server written in Rust.
 
 One client, three transports — **embedded** (in-process, no Docker), **connect** (any running Rift
@@ -9,7 +9,7 @@ stubs, predicates, responses, response cycling, behaviors, proxy record/playback
 stateful scenarios, request verification, and TLS-MITM intercept.
 
 ```java
-import static io.github.etacassiopeia.rift.dsl.RiftDsl.*;
+import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
 
 try (Rift rift = Rift.embedded()) {
     Imposter users = rift.create(
@@ -32,5 +32,5 @@ try (Rift rift = Rift.embedded()) {
 
 - **[API design (v1)](design/sdk-api.md)** — the pinned public API surface.
 
-See the [README on GitHub](https://github.com/EtaCassiopeia/rift-java#installation) for installation
+See the [README on GitHub](https://github.com/achird-labs/rift-java#installation) for installation
 (Maven / Gradle, release and snapshot channels) and module layout.
