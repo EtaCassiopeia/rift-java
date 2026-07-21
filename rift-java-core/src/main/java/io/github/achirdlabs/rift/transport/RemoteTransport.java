@@ -233,6 +233,12 @@ public final class RemoteTransport implements RiftTransport {
         if (clause instanceof MatchClause.FlowId flowId) {
             return "flow_id=" + flowId.value();
         }
+        if (clause instanceof MatchClause.Method method) {
+            return "method=" + method.value();
+        }
+        if (clause instanceof MatchClause.Path path) {
+            return "path=" + path.value();
+        }
         throw new IllegalStateException("unreachable: " + clause);
     }
 

@@ -138,6 +138,58 @@ class MatchClauseIT {
         });
     }
 
+    @TestFactory
+    Stream<DynamicTest> methodAndPathClausesFilterOnTheWire() {
+        return gated("method= and path= are parsed by the engine as written (engine >= 0.15.0)", () -> {
+            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+                Imposter imp = recordingImposter(rift);
+
+                // Three entries differing on exactly one axis each, so a clause that filtered on the
+                // wrong one is distinguishable: POST /a shares the path, GET /b shares the method.
+                send(imp.uri() + "/a", "GET", "flow-1");
+                send(imp.uri() + "/a", "POST", "flow-1");
+                send(imp.uri() + "/b", "GET", "flow-1");
+
+                RecordedPage page = imp.recordedSince(0, MatchClause.method("GET"), MatchClause.path("/a"));
+
+                assertEquals(List.of("/a"), page.requests().stream().map(RecordedRequest::path).toList(),
+                        "only the GET /a satisfies both clauses");
+                assertEquals(List.of("GET"), page.requests().stream().map(RecordedRequest::method).toList());
+                assertEquals(3, page.nextIndex().orElse(-1), "the cursor reaches the journal tip");
+
+                // Record only an entry BOTH clauses reject: the page is empty and the cursor must
+                // still move, or a filtered tail would re-scan this entry on every future poll.
+                send(imp.uri() + "/b", "POST", "flow-1");
+                RecordedPage rejected = imp.recordedSince(3, MatchClause.method("GET"), MatchClause.path("/a"));
+
+                assertTrue(rejected.requests().isEmpty(), "the new entry matches neither clause");
+                assertEquals(4, rejected.nextIndex().orElse(-1),
+                        "an empty filtered page still advances past what it rejected");
+            }
+        });
+    }
+
+    @TestFactory
+    Stream<DynamicTest> theMethodClauseIsCaseSensitiveOnTheEngine() {
+        return gated("a lower-case method clause matches nothing rather than being coerced", () -> {
+            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+                Imposter imp = recordingImposter(rift);
+
+                send(imp.uri() + "/a", "GET", "flow-1");
+
+                // Proves the pair of contracts together: the engine compares methods case-sensitively,
+                // AND the SDK does not quietly upper-case the caller's value on the way out. If either
+                // half were wrong this would come back with the GET.
+                assertTrue(imp.recordedPage(MatchClause.method("get")).requests().isEmpty(),
+                        "\"get\" is not \"GET\" — the clause rides verbatim and matches nothing");
+                assertEquals(List.of("/a"),
+                        imp.recordedPage(MatchClause.method("GET")).requests().stream()
+                                .map(RecordedRequest::path).toList(),
+                        "...while the exact-case clause still matches");
+            }
+        });
+    }
+
     private static Imposter recordingImposter(Rift rift) {
         // The engine resolves flow_id from this header, which is what `match=flow_id=` filters on.
         return rift.create(imposter("match")
@@ -150,6 +202,21 @@ class MatchClauseIT {
 
     private static void get(String url, String flowId) throws Exception {
         get(url, flowId, null, null);
+    }
+
+    /**
+     * Same recorded round trip as {@link #get}, with the method under the caller's control. Like
+     * {@code get}, it relies on an unmatched request still being served (Mountebank's empty
+     * fallback) and therefore still being recorded — the journal is what is under test, not the stub.
+     */
+    private static void send(String url, String method, String flowId) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(20))
+                .header(FLOW_HEADER, flowId)
+                .method(method, HttpRequest.BodyPublishers.noBody())
+                .build();
+        HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), "the request must be served, so it is recorded");
     }
 
     private static void get(String url, String flowId, String header, String headerValue) throws Exception {

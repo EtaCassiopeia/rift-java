@@ -99,6 +99,23 @@ class SpaceCursorTest {
     }
 
     @Test
+    void theMethodAndPathClausesComposeWithTheFlowIdScopeToo() {
+        try (FakeAdminServer s = new FakeAdminServer()) {
+            s.respond("GET /imposters/4545/savedRequests", 200, "[]");
+            try (Rift rift = connect(s)) {
+                // A space passes caller filters through untouched, so the clauses added in #148 are
+                // scoped by the space rather than replacing its scope — the failure would be a tail
+                // reading another flow's traffic.
+                created(s, rift).space("alice")
+                        .recordedSince(3, MatchClause.method("POST"), MatchClause.path("/orders"));
+
+                assertEquals("/imposters/4545/savedRequests?since=3&match=flow_id%3Dalice"
+                        + "&match=method%3DPOST&match=path%3D%2Forders", lastGet(s));
+            }
+        }
+    }
+
+    @Test
     void cursorZeroIsARealCursorNotABaseline() {
         try (FakeAdminServer s = new FakeAdminServer()) {
             s.respond("GET /imposters/4545/savedRequests", 200, "[]");

@@ -625,8 +625,17 @@ no HTTP response to read, reports "unsupported" honestly with no code of its own
 public sealed interface MatchClause {
     static MatchClause header(String name, String value);  // match=header:<Name>=<Value>
     static MatchClause flowId(String flowId);              // match=flow_id=<Value>
+    static MatchClause method(String method);              // match=method=<Verb>   (engine >= 0.15.0)
+    static MatchClause path(String path);                  // match=path=<Path>     (engine >= 0.15.0)
 }
 ```
+
+`method` and `path` (#148) need a rift engine **≥ 0.15.0**; the SDK's compatibility floor stays lower
+because every other clause works below it. There is no sniffing and no fallback — an older engine
+rejects the clause with a 400 that surfaces as `InvalidDefinition`, which is the correct answer: a
+tail that quietly returned unfiltered pages would cross-contaminate exactly what the filter exists to
+separate. `method` is compared **case-sensitively** and `path` against the **bare** recorded path —
+still percent-encoded, never carrying the query string, which the engine keeps as a separate field.
 
 **`MatchClause` is not `RequestMatch`.** They answer different questions and do not convert:
 
@@ -634,7 +643,7 @@ public sealed interface MatchClause {
 |---|---|---|
 | What | Mountebank predicate set | journal/stream filter clause |
 | Evaluated by | the engine's predicate engine, via `POST /verify` | the engine's journal filter, via `match=` |
-| Grammar | full — `equals`/`contains`/`matches`/`jsonPath`/`xpath`/`and`/`or`/`not` | closed — header equality, flow-id equality |
+| Grammar | full — `equals`/`contains`/`matches`/`jsonPath`/`xpath`/`and`/`or`/`not` | closed — exact equality on header, flow id, method, path |
 | Used for | `verify(match, times)`, `recorded(match)` (client-side filter) | `recordedPage`/`recordedSince`/`clearRecorded` filters, `Space.recordedPage`/`recordedSince` (auto-injected `flow_id`, #149), `/events?match=` (#131) |
 
 The grammar is closed because the engine's is: it rejects a clause it cannot parse with a 400 rather
@@ -644,6 +653,13 @@ held to the HTTP token grammar, which is stricter than the engine's own empty-na
 a name containing `=` would *not* 400, it would re-split into a different name and value and filter
 on something the caller never asked for. Silently meaning something else is the failure mode the
 closed grammar exists to prevent, so the one input that could cause it is rejected at construction.
+
+The same rule rejects clauses the engine *would* accept but could never match, because a filter that
+silently returns nothing is that failure wearing the opposite mask: a non-token `method`, and a
+`path` that is blank, relative, or carries a `?`/`#` (compared whole against a bare path, it would
+match nothing forever without ever erroring). Query-parameter and body predicates are deliberately
+absent — the engine's grammar excludes them, so `RequestMatch` with a client-side filter remains the
+answer there.
 
 Clauses **AND** together and are applied *after* the cursor cut, and the cursor **advances past
 entries a clause rejected** — so a filtered page can be empty while its cursor still moves, and a

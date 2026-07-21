@@ -302,6 +302,24 @@ class EventStreamTest {
     }
 
     @Test
+    void theMethodAndPathFiltersAreRenderedOntoTheConnectUrlToo() throws Exception {
+        try (FakeAdminServer s = new FakeAdminServer()) {
+            s.stream("GET /events", 200, sink -> sink.write(HELLO));
+            try (Rift rift = connect(s);
+                 EventStream stream = rift.events(EventStreamOptions.builder()
+                         .types(EventStreamOptions.EventType.REQUESTS)
+                         .match(MatchClause.method("POST"), MatchClause.path("/orders"))
+                         .build())) {
+                drain(stream, 1);
+
+                String path = s.received().stream().map(FakeAdminServer.Received::path)
+                        .filter(p -> p.startsWith("/events")).findFirst().orElseThrow();
+                assertEquals("/events?types=requests&match=method%3DPOST&match=path%3D%2Forders", path);
+            }
+        }
+    }
+
+    @Test
     void theStreamIsSingleUseAndRefusesToBeReopened() throws Exception {
         try (FakeAdminServer s = new FakeAdminServer()) {
             s.stream("GET /events", 200, sink -> {
