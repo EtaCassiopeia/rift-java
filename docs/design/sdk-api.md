@@ -2,7 +2,9 @@
 
 Status: **accepted design** — this document pins down the public API so implementation issues
 carry no open design decisions. Canonical location: `docs/design/sdk-api.md`; mirrored as
-issue #19. Sources: rift engine 0.12.0 (`achird-labs/rift`), C-ABI v2
+issue #19. Sources: the rift engine (`achird-labs/rift`) — this document tracks the pinned
+`<rift.engine.version>`, currently 0.15.0, and states a per-feature version floor wherever one
+applies rather than pinning the whole document to a single release — C-ABI v2
 (`librift_ffi`, `include/rift_ffi.h`), the rift-conformance corpus + Plane-B SPI, rift-node
 0.12.x (reference SDK), the rift-scala design issues (consumer of this SDK), and a DX benchmark
 of WireMock 3 / MockServer / Hoverfly / Testcontainers / wiremock-spring-boot.
