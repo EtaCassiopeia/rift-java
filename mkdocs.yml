@@ -32,5 +32,7 @@ nav:
       - JUnit 5: junit5.md
       - Testcontainers: testcontainers.md
       - Record & replay: recording.md
+      - Spaces & flow state: spaces.md
+      - Event stream: events.md
   - Reference:
       - API design (v1): design/sdk-api.md
