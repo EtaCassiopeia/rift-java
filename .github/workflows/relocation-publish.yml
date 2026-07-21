@@ -1,0 +1,134 @@
+# One-shot publish of the pre-org-move relocation stubs (see relocation/pom.xml and CONTRIBUTING).
+#
+# 0.1.0-0.1.2 shipped under groupId io.github.etacassiopeia; 0.1.3+ ships under
+# io.github.achird-labs. `relocation/` publishes pom-only artifacts at the boundary version under the
+# OLD coordinates whose <distributionManagement><relocation> points at the new ones, so a build that
+# merely bumps its existing dependency resolves and is told where the artifact went instead of
+# failing with an unexplained "not found".
+#
+# WHY THIS IS A WORKFLOW AND NOT A LOCAL `mvn deploy`: the Central Portal token and the GPG signing
+# key live here as repository secrets, not on anyone's laptop. Running it here means the one-shot is
+# reproducible, auditable, and does not require handing those credentials around. Central Portal
+# tokens are account-scoped rather than namespace-scoped, so the same MAVEN_CENTRAL_* secrets that
+# publish io.github.achird-labs also publish the old io.github.etacassiopeia namespace the same
+# account still owns.
+#
+# THE ORDERING RULE THIS ENFORCES: a relocation must not be published before the artifact it points
+# at exists, or every consumer that follows it lands on a 404 — strictly worse than the plain
+# "not found" the stub was meant to replace. That rule was previously only a comment, so the
+# preflight below turns it into a gate: every relocation target is resolved on Central first, and
+# the job refuses to deploy unless all of them are live. Note Central's rsync to repo1.maven.org
+# lags the Portal by ~10-30 minutes after a release, so a run started immediately after tagging is
+# expected to fail this gate — wait and re-run rather than forcing it.
+#
+# Manual by design (workflow_dispatch): this is a single deliberate act at one boundary version, not
+# something that should fire on a push. Do not repeat it for later versions.
+
+name: Publish relocation stubs (one-shot)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Resolve and verify everything, but do not deploy"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  relocate:
+    name: Publish io.github.etacassiopeia relocation stubs
+    runs-on: ubuntu-latest
+    # Only the canonical repo publishes; a fork must never deploy under these coordinates.
+    if: github.repository == 'achird-labs/rift-java'
+    steps:
+      - uses: actions/checkout@v5
+
+      # The stub version is the boundary version, read from the relocation pom itself so this
+      # workflow cannot drift from it.
+      - name: Read the relocation version
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -n 's|.*<version>\([0-9][^<]*\)</version>.*|\1|p' relocation/pom.xml | head -n1)"
+          if [ -z "${VERSION}" ]; then
+            echo "::error::Could not read the relocation version from relocation/pom.xml."
+            exit 1
+          fi
+          echo "Relocation stubs will publish at ${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      # The gate: never relocate consumers to something that does not exist yet.
+      - name: Verify every relocation target is live on Central
+        shell: bash
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          BASE="https://repo1.maven.org/maven2/io/github/achird-labs"
+          # Every module the stubs point at, including the parent pom.
+          MODULES="rift-java-parent rift-java-bom rift-java-core rift-java-jackson rift-java-junit5 \
+                   rift-java-natives rift-java-spring rift-java-testcontainers rift-java-embedded \
+                   rift-java-embedded-jdk21"
+          missing=0
+          for m in ${MODULES}; do
+            url="${BASE}/${m}/${VERSION}/${m}-${VERSION}.pom"
+            code="$(curl -s -o /dev/null -w '%{http_code}' "${url}")"
+            printf '  %-28s %s\n' "${m}" "${code}"
+            if [ "${code}" != "200" ]; then
+              missing=$((missing + 1))
+            fi
+          done
+          if [ "${missing}" -ne 0 ]; then
+            echo "::error::${missing} relocation target(s) are not on Central at ${VERSION} yet."
+            echo "::error::Publishing the stubs now would redirect consumers to a 404. If ${VERSION}"
+            echo "::error::was tagged in the last half hour this is just Central's rsync lag — wait"
+            echo "::error::for repo1.maven.org to serve it and re-run this workflow."
+            exit 1
+          fi
+          echo "All relocation targets are live at ${VERSION}."
+
+      # Pom-only artifacts: no compilation, so the reactor JDK is irrelevant and no toolchain is
+      # needed (unlike publish.yml's dual-embedded build).
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      - name: Build the stubs (no deploy)
+        run: ./mvnw -B -ntp -f relocation/pom.xml -Prelease verify
+        env:
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+
+      - name: Deploy the stubs to Maven Central
+        if: inputs.dry_run == false
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: ./mvnw -B -ntp -f relocation/pom.xml -Prelease deploy
+
+      - name: Summary
+        shell: bash
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          if [ "${DRY}" = "true" ]; then
+            echo "### Dry run — stubs built and signed at ${VERSION}, nothing deployed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Re-run with \`dry_run: false\` to publish." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Relocation stubs deployed at ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`io.github.etacassiopeia:*:${VERSION}\` now relocates to \`io.github.achird-labs\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "This is a one-shot: do not repeat it for later versions." >> "$GITHUB_STEP_SUMMARY"
+          fi
