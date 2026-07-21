@@ -20,10 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Server-side {@code match=} filter clauses. The engine's grammar is two forms AND-ed
- * ({@code header:<Name>=<Value>}, {@code flow_id=<Value>}), and it rejects a malformed clause with a
- * 400 rather than falling back to returning everything — so the SDK's job is to make an invalid
- * clause unrepresentable and to encode the valid ones exactly.
+ * Server-side {@code match=} filter clauses. The engine's grammar is four forms AND-ed
+ * ({@code header:<Name>=<Value>}, {@code flow_id=<Value>}, {@code method=<Verb>}, {@code path=<Path>}),
+ * and it rejects a malformed clause with a 400 rather than falling back to returning everything — so
+ * the SDK's job is to make an invalid clause unrepresentable and to encode the valid ones exactly.
  *
  * <p>Encoding is the sharp edge. The engine splits a query pair on its <em>first</em> {@code =} and
  * only then percent-decodes the value, so the clause must be percent-encoded — an unencoded
@@ -152,6 +152,149 @@ class MatchClauseTest {
                 assertEquals("/imposters/4545/savedRequests", lastPath(s, "GET"));
             }
         }
+    }
+
+    @Test
+    void aMethodClauseIsRenderedInTheEnginesGrammar() {
+        try (FakeAdminServer s = new FakeAdminServer()) {
+            s.respond("GET /imposters/4545/savedRequests", 200, "[]");
+            try (Rift rift = connect(s)) {
+                created(s, rift).recordedPage(MatchClause.method("GET"));
+
+                assertEquals("/imposters/4545/savedRequests?match=method%3DGET", lastPath(s, "GET"));
+            }
+        }
+    }
+
+    @Test
+    void aPathClauseIsRenderedInTheEnginesGrammar() {
+        try (FakeAdminServer s = new FakeAdminServer()) {
+            s.respond("GET /imposters/4545/savedRequests", 200, "[]");
+            try (Rift rift = connect(s)) {
+                created(s, rift).recordedPage(MatchClause.path("/orders"));
+
+                assertEquals("/imposters/4545/savedRequests?match=path%3D%2Forders", lastPath(s, "GET"));
+            }
+        }
+    }
+
+    @Test
+    void aMethodIsSentVerbatimRatherThanCaseCoerced() {
+        try (FakeAdminServer s = new FakeAdminServer()) {
+            s.respond("GET /imposters/4545/savedRequests", 200, "[]");
+            try (Rift rift = connect(s)) {
+                // The engine compares methods case-sensitively. Upper-casing a caller's "get" here
+                // would turn a filter that legitimately matches nothing into one that matches
+                // everything — a silently different question, so the value rides verbatim.
+                created(s, rift).recordedPage(MatchClause.method("get"));
+
+                assertEquals("/imposters/4545/savedRequests?match=method%3Dget", lastPath(s, "GET"));
+            }
+        }
+    }
+
+    @Test
+    void anAlreadyEncodedPathIsNotDecodedOnTheWayOut() {
+        try (FakeAdminServer s = new FakeAdminServer()) {
+            s.respond("GET /imposters/4545/savedRequests", 200, "[]");
+            try (Rift rift = connect(s)) {
+                // The engine compares against the RAW recorded path, so "/a%20b" must arrive as the
+                // five characters %,2,0 included — i.e. the '%' itself must be encoded. Sending it
+                // unencoded would have the engine decode it to "/a b" and match a different request.
+                created(s, rift).recordedPage(MatchClause.path("/a%20b"));
+
+                String query = lastPath(s, "GET").substring(lastPath(s, "GET").indexOf('?') + 1);
+                assertEquals("match=path%3D%2Fa%2520b", query);
+                assertEquals("path=/a%20b",
+                        URLDecoder.decode(query.substring("match=".length()), StandardCharsets.UTF_8));
+            }
+        }
+    }
+
+    @Test
+    void allFourClauseFormsAndTogetherAfterTheCursor() {
+        try (FakeAdminServer s = new FakeAdminServer()) {
+            s.respond("GET /imposters/4545/savedRequests", 200, "[]");
+            try (Rift rift = connect(s)) {
+                created(s, rift).recordedSince(7, MatchClause.flowId("a"), MatchClause.header("X-K", "v"),
+                        MatchClause.method("POST"), MatchClause.path("/orders"));
+
+                assertEquals("/imposters/4545/savedRequests?since=7&match=flow_id%3Da&match=header%3AX-K%3Dv"
+                        + "&match=method%3DPOST&match=path%3D%2Forders", lastPath(s, "GET"));
+            }
+        }
+    }
+
+    @Test
+    void aScopedClearAcceptsTheNewClausesToo() {
+        try (FakeAdminServer s = new FakeAdminServer()) {
+            s.respond("DELETE /imposters/4545/savedRequests", 200, "");
+            try (Rift rift = connect(s)) {
+                // Mixes a pre-existing clause with the new ones: the scoped clear is the destructive
+                // direction, so a clause dropped here deletes traffic the caller meant to keep.
+                created(s, rift).clearRecorded(MatchClause.flowId("tenant-a"), MatchClause.method("DELETE"),
+                        MatchClause.path("/cart"));
+
+                assertEquals("/imposters/4545/savedRequests?match=flow_id%3Dtenant-a"
+                        + "&match=method%3DDELETE&match=path%3D%2Fcart", lastPath(s, "DELETE"));
+            }
+        }
+    }
+
+    @Test
+    void aMethodThatCouldNeverHaveBeenRecordedIsUnrepresentable() {
+        // A method is an HTTP token. A non-token can appear in no recorded request — the engine
+        // could never have parsed such a request line — so the clause would silently match nothing
+        // forever rather than fail, which is the failure mode this grammar is closed to prevent.
+        assertThrows(NullPointerException.class, () -> MatchClause.method(null));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.method(""));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.method("   "));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.method("GE T"));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.method("GET,POST"));
+        // ...while a legitimate extension method (WebDAV, PATCH, and friends) still works.
+        assertEquals("PROPFIND", ((MatchClause.Method) MatchClause.method("PROPFIND")).value());
+    }
+
+    @Test
+    void aPathThatCouldNeverMatchIsUnrepresentable() {
+        assertThrows(NullPointerException.class, () -> MatchClause.path(null));
+        // The engine compares the BARE path; a clause carrying a query string or fragment would be
+        // compared whole and never match anything, silently.
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.path("/orders?id=1"));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.path("/orders#top"));
+        // A recorded path always starts with '/', so anything else is likewise a never-matcher.
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.path("orders"));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.path(""));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.path("   "));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.path("http://host/orders"));
+        // A request target cannot carry these at all, so the engine could never have recorded a path
+        // containing one — the likeliest version of this mistake being a path typed with a space.
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.path("/a b"));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.path("/a\tb"));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.path("/a<b"));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.path("/a>b"));
+        assertThrows(IllegalArgumentException.class, () -> MatchClause.path("/a`b"));
+        // ...while the root and ordinary paths work.
+        assertEquals("/", ((MatchClause.Path) MatchClause.path("/")).value());
+        assertEquals("/a/b", ((MatchClause.Path) MatchClause.path("/a/b")).value());
+    }
+
+    @Test
+    void aPathTheEngineCouldRecordStaysExpressible() {
+        // The rejection above must not overshoot. Every character here is one the engine's URI parser
+        // accepts in a request target — real clients send them and they land in the journal verbatim —
+        // so refusing them would make a legitimate filter unconstructible, which is its own silent
+        // failure: the caller cannot express the tail they can actually observe.
+        assertEquals("/a[1]", ((MatchClause.Path) MatchClause.path("/a[1]")).value());
+        assertEquals("/a{b}", ((MatchClause.Path) MatchClause.path("/a{b}")).value());
+        // The parser allows a bare quote "for parity" with clients that embed JSON in the path.
+        assertEquals("/a\"b", ((MatchClause.Path) MatchClause.path("/a\"b")).value());
+        assertEquals("/a|b", ((MatchClause.Path) MatchClause.path("/a|b")).value());
+        assertEquals("/café", ((MatchClause.Path) MatchClause.path("/café")).value());
+        assertEquals("/100%", ((MatchClause.Path) MatchClause.path("/100%")).value());
+        // `=` and `&` carry no structural meaning in this clause, unlike a header name: the engine
+        // strips the "path=" prefix and takes the rest verbatim rather than re-splitting it.
+        assertEquals("/a=b&c", ((MatchClause.Path) MatchClause.path("/a=b&c")).value());
     }
 
     @Test
