@@ -36,7 +36,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class SpaceCursorIT {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    private static final int PORT = 4597;
     private static final String FLOW_HEADER = "X-Flow-Id";
 
     @TestFactory
@@ -44,7 +43,6 @@ class SpaceCursorIT {
         return gated("space cursor page + tail over a real engine", () -> {
             try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
                 Imposter imp = rift.create(imposter("space-cursor")
-                        .port(PORT)
                         .protocol("http")
                         .record()
                         .flowState(inMemoryFlowState().flowIdFromHeader(FLOW_HEADER))

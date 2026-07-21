@@ -37,7 +37,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class SpaceRecordedIT {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    private static final int PORT = 4596;
     private static final String FLOW_HEADER = "X-Flow-Id";
 
     @TestFactory
@@ -45,7 +44,6 @@ class SpaceRecordedIT {
         return gated("space(flowId).recorded() over a real engine", () -> {
             try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
                 Imposter imp = rift.create(imposter("space-recorded")
-                        .port(PORT)
                         .protocol("http")
                         .record()
                         .flowState(inMemoryFlowState().flowIdFromHeader(FLOW_HEADER))

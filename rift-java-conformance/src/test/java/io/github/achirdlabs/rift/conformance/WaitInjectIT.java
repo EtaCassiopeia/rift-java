@@ -59,11 +59,6 @@ class WaitInjectIT {
      */
     private static final long MIN_OBSERVED_MS = REQUESTED_MS / 2;
 
-    /** Distinct from the corpus/DSL fixtures, which occupy 4500-4517 ({@code DslFixtures}). */
-    private static final int APPLIES_PORT = 4591;
-    private static final int GATED_PORT = 4592;
-    private static final int UNGATED_PORT = 4593;
-
     /** The two canonical spellings of a function wait — one injection capability, two syntaxes. */
     private static Map<String, UnaryOperator<IsSpec>> functionWaitForms() {
         Map<String, UnaryOperator<IsSpec>> forms = new LinkedHashMap<>();
@@ -89,7 +84,7 @@ class WaitInjectIT {
     Stream<DynamicTest> functionWaitAppliesLatencyOnALiveEngine() {
         return eachForm(functionWaitForms(), (name, form) -> {
             try (Rift rift = spawn(true)) {
-                Imposter imp = rift.create(waitImposter("wait-inject · applies", APPLIES_PORT, form));
+                Imposter imp = rift.create(waitImposter("wait-inject · applies", form));
 
                 long elapsedMs = timeGet(imp.uri() + "/slow");
 
@@ -114,7 +109,7 @@ class WaitInjectIT {
         return eachForm(functionWaitForms(), (name, form) -> {
             try (Rift rift = spawn(false)) {
                 InvalidDefinition rejection = assertThrows(InvalidDefinition.class,
-                        () -> rift.create(waitImposter("wait-inject · gated", GATED_PORT, form)),
+                        () -> rift.create(waitImposter("wait-inject · gated", form)),
                         () -> name + ": a function wait must be rejected when the engine runs without "
                                 + "--allow-injection");
 
@@ -135,7 +130,7 @@ class WaitInjectIT {
     Stream<DynamicTest> nonFunctionWaitsAreNotGatedByAllowInjection() {
         return eachForm(nonFunctionWaitForms(), (name, form) -> {
             try (Rift rift = spawn(false)) {
-                Imposter imp = rift.create(waitImposter("wait-inject · ungated", UNGATED_PORT, form));
+                Imposter imp = rift.create(waitImposter("wait-inject · ungated", form));
 
                 long elapsedMs = timeGet(imp.uri() + "/slow");
 
@@ -147,9 +142,8 @@ class WaitInjectIT {
     }
 
     private static io.github.achirdlabs.rift.dsl.ImposterSpec waitImposter(
-            String name, int port, UnaryOperator<IsSpec> form) {
+            String name, UnaryOperator<IsSpec> form) {
         return imposter(name)
-                .port(port)
                 .protocol("http")
                 .stub(onGet("/slow").willReturn(form.apply(okJson("{\"ok\":true}"))));
     }

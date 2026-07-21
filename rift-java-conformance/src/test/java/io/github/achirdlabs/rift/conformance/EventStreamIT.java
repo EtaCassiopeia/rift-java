@@ -40,7 +40,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class EventStreamIT {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    private static final int PORT = 4597;
 
     @TestFactory
     Stream<DynamicTest> theStreamPushesWhatTheJournalRecords() {
@@ -48,7 +47,7 @@ class EventStreamIT {
             try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
                 Imposter imp = recordingImposter(rift);
 
-                try (EventStream events = rift.events(EventStreamOptions.builder().port(PORT).build())) {
+                try (EventStream events = rift.events(EventStreamOptions.builder().port(imp.port()).build())) {
                     Iterator<RiftEvent> it = events.iterator();
 
                     RiftEvent.Hello hello = assertInstanceOf(RiftEvent.Hello.class, it.next(),
@@ -60,7 +59,7 @@ class EventStreamIT {
                     get(imp.uri() + "/pushed");
 
                     RiftEvent.RequestRecorded pushed = assertInstanceOf(RiftEvent.RequestRecorded.class, it.next());
-                    assertEquals(PORT, pushed.port());
+                    assertEquals(imp.port(), pushed.port());
                     assertEquals("/pushed", pushed.request().path());
                     assertTrue(pushed.seq().isPresent(), "a request event carries its sequence id");
 
@@ -82,7 +81,7 @@ class EventStreamIT {
                 Imposter imp = recordingImposter(rift);
                 long cursor;
 
-                try (EventStream events = rift.events(EventStreamOptions.builder().port(PORT).build())) {
+                try (EventStream events = rift.events(EventStreamOptions.builder().port(imp.port()).build())) {
                     Iterator<RiftEvent> it = events.iterator();
                     assertInstanceOf(RiftEvent.Hello.class, it.next());
 
@@ -122,7 +121,7 @@ class EventStreamIT {
                     RiftEvent.ImposterChanged changed =
                             assertInstanceOf(RiftEvent.ImposterChanged.class, it.next());
                     assertEquals(RiftEvent.ImposterChanged.Action.STUBS_CHANGED, changed.action());
-                    assertEquals(PORT, changed.port().orElseThrow());
+                    assertEquals(imp.port(), changed.port().orElseThrow());
                 }
             }
         });
@@ -130,7 +129,6 @@ class EventStreamIT {
 
     private static Imposter recordingImposter(Rift rift) {
         return rift.create(imposter("events")
-                .port(PORT)
                 .protocol("http")
                 .record()
                 .stub(onGet("/pushed").willReturn(okJson("{\"ok\":true}"))));
