@@ -5,8 +5,10 @@ Mountebank-compatible HTTP/HTTPS mock server written in Rust.
 
 📖 **Documentation site: [achird-labs.github.io/rift-java](https://achird-labs.github.io/rift-java/)**
 
-> **Available on Maven Central.** The current release is **0.1.2** under the
-> `io.github.achird-labs` group ID. The public API is documented on the
+> **Available on Maven Central.** The current release is **0.1.2**. From **0.1.3** onward rift-java
+> publishes under the `io.github.achird-labs` group ID; **0.1.2 and earlier are under
+> `io.github.etacassiopeia`** — see [Moving off the old group ID](#moving-off-the-old-group-id).
+> The public API is documented on the
 > [docs site](https://achird-labs.github.io/rift-java/) and
 > [docs/design/sdk-api.md](docs/design/sdk-api.md). Stable releases go to Maven Central on each
 > `vX.Y.Z` tag; development **snapshots** publish to the Central Portal snapshots repository on
@@ -51,12 +53,13 @@ verification, and TLS-MITM intercept with truststore/`SSLContext` helpers.
 
 ## Installation
 
-rift-java is published under the `io.github.achird-labs` group ID, on two channels:
+rift-java is published under the `io.github.achird-labs` group ID (since 0.1.3 — see
+[Moving off the old group ID](#moving-off-the-old-group-id)), on two channels:
 
 | Channel | Repository | Version form | Use for |
 |---|---|---|---|
 | **Stable release** | Maven Central — the default, no config needed | `X.Y.Z` (e.g. `0.1.2`) | CI / regular test suites |
-| **Snapshot** | [Central Portal snapshots](https://central.sonatype.com/repository/maven-snapshots/) — must be added | `X.Y.Z-SNAPSHOT` (e.g. `0.1.0-SNAPSHOT`) | trying the latest `master` |
+| **Snapshot** | [Central Portal snapshots](https://central.sonatype.com/repository/maven-snapshots/) — must be added | `X.Y.Z-SNAPSHOT` (e.g. `0.1.3-SNAPSHOT`) | trying the latest `master` |
 
 The recommended entry point is the **BOM** (`rift-java-bom`): import it once and every module is
 version-pinned, so you never repeat a version. See the [BOM README](rift-java-bom/README.md) for the
@@ -144,6 +147,26 @@ dependencies {
 > version is compared to the floor. Because the symbol set is authoritative for the embedded engine, a
 > locally-built engine that reports a placeholder version (the workspace `0.1.0`) is accepted with a
 > warning rather than failing — its ABI is already proven complete.
+
+### Moving off the old group ID
+
+rift-java moved to the [achird-labs](https://github.com/achird-labs) org. The coordinates changed
+once, at **0.1.3**:
+
+| Versions | Group ID | Java packages |
+|---|---|---|
+| 0.1.0 – 0.1.2 | `io.github.etacassiopeia` | `io.github.etacassiopeia.rift.*` |
+| 0.1.3 and later | `io.github.achird-labs` | `io.github.achirdlabs.rift.*` |
+
+To upgrade, change the group ID in your build and the package in your imports — the artifact IDs and
+the API itself are unchanged. Note the group ID keeps the hyphen (`achird-labs`) while the Java
+package drops it (`achirdlabs`), because a package name cannot contain one.
+
+0.1.3 also publishes pom-only **relocation stubs** under the old group ID, so a build that merely
+bumps its existing `io.github.etacassiopeia` dependency to 0.1.3 still resolves — Maven, Gradle and
+coursier follow the relocation and warn with the new coordinates rather than failing with an
+unexplained "not found". The stubs exist only at 0.1.3; past that, depend on the new group ID
+directly. Builds pinned at 0.1.2 or earlier are unaffected and keep resolving as before.
 
 ## Quick starts
 

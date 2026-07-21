@@ -64,8 +64,20 @@ You never need to pass a profile by hand for a normal build.
 Artifacts publish to Maven Central under the `io.github.achird-labs` namespace via the
 [Central Publishing plugin](https://central.sonatype.org/publish/publish-portal-maven/).
 
-- **Snapshots** deploy automatically from `master` (`0.1.0-SNAPSHOT`).
-- **Releases** deploy from a published GitHub Release.
+- **Snapshots** deploy automatically on every push to `master`, at whatever `-SNAPSHOT` version the
+  root pom currently carries.
+- **Releases are cut by pushing a `vX.Y.Z` tag** — that is the only trigger. The `Publish` workflow
+  stamps every module with the version from the tag, deploys, *then* creates the GitHub Release
+  object and pushes a follow-up commit advancing `master` to the next `-SNAPSHOT` (which also syncs
+  the README's install snippets to the released version).
+
+```sh
+git tag v0.1.3 && git push origin v0.1.3
+```
+
+Push the tag with credentials of your own, not `GITHUB_TOKEN`: GitHub deliberately does not trigger
+a workflow from a tag pushed by `GITHUB_TOKEN`, which is why the optional auto-release loop needs a
+separate `RELEASE_TOKEN` secret.
 
 The `Publish` workflow is a no-op until these repository secrets are configured:
 `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD` (a Central Portal user token), `GPG_PRIVATE_KEY`,
