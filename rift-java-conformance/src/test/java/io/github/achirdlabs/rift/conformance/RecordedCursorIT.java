@@ -36,14 +36,12 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class RecordedCursorIT {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    private static final int PORT = 4594;
 
     @TestFactory
     Stream<DynamicTest> cursorContract() {
         return gated("the savedRequests cursor over a real engine", () -> {
             try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
                 Imposter imp = rift.create(imposter("cursor")
-                        .port(PORT)
                         .protocol("http")
                         .record()
                         .stub(onGet("/hit").willReturn(okJson("{\"ok\":true}"))));

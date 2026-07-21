@@ -39,7 +39,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class MatchClauseIT {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    private static final int PORT = 4595;
     private static final String FLOW_HEADER = "X-Flow-Id";
 
     @TestFactory
@@ -193,7 +192,6 @@ class MatchClauseIT {
     private static Imposter recordingImposter(Rift rift) {
         // The engine resolves flow_id from this header, which is what `match=flow_id=` filters on.
         return rift.create(imposter("match")
-                .port(PORT)
                 .protocol("http")
                 .record()
                 .flowState(inMemoryFlowState().flowIdFromHeader(FLOW_HEADER))
