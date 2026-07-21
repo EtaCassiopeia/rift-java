@@ -16,7 +16,7 @@ Import the BOM, then depend on whichever modules you need — no `<version>` req
     <dependency>
       <groupId>io.github.achird-labs</groupId>
       <artifactId>rift-java-bom</artifactId>
-      <version>0.1.0-SNAPSHOT</version>
+      <version>0.1.3-SNAPSHOT</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>
