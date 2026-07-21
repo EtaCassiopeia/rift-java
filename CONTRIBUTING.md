@@ -91,13 +91,26 @@ pom-only stubs that redirect those coordinates at 0.1.3 to the new ones, so anyo
 an existing dependency gets a warning naming the new coordinates instead of an unresolvable
 artifact. It is deliberately **not** in the root reactor.
 
-Publish it **once, immediately after 0.1.3 is live** under the new groupId — the relocation
-target has to already exist on Central, or consumers get redirected to a 404:
+Publish it **once, after 0.1.3 is live** under the new groupId — the relocation target has to
+already exist on Central, or consumers get redirected to a 404, which is strictly worse than the
+plain "not found" the stub replaces. Run the **Publish relocation stubs (one-shot)** workflow
+(`workflow_dispatch`), which does exactly that with the credentials already held as repository
+secrets:
 
 ```sh
-mvn -f relocation/pom.xml -Prelease deploy
+gh workflow run relocation-publish.yml -f dry_run=true    # build + sign + verify targets, no deploy
+gh workflow run relocation-publish.yml -f dry_run=false   # publish
 ```
 
-This needs Central credentials for the **old** `io.github.etacassiopeia` namespace, not the
-new one. Do not repeat it for later versions: one relocation at the boundary version is the
-whole mechanism, and anyone pinned at 0.1.2 or lower is unaffected.
+It refuses to deploy unless **every** relocation target already resolves on Central, so the
+ordering rule is enforced rather than remembered. Central's rsync to `repo1.maven.org` lags the
+Portal by roughly 10–30 minutes after a release, so a run started right after tagging is expected
+to fail that check — wait and re-run rather than forcing it.
+
+Central Portal tokens are account-scoped, not namespace-scoped, so the same `MAVEN_CENTRAL_*`
+secrets cover the old `io.github.etacassiopeia` namespace the account still owns. Publishing by hand
+(`mvn -f relocation/pom.xml -Prelease deploy`) works too, but needs those credentials and the GPG
+key locally.
+
+Do not repeat this for later versions: one relocation at the boundary version is the whole
+mechanism, and anyone pinned at 0.1.2 or lower is unaffected.
