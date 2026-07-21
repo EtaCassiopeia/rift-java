@@ -10,13 +10,18 @@ all six per-platform classifier jars (`linux-x86_64`, `linux-aarch64`, `linux-mu
 
 Import the BOM, then depend on whichever modules you need — no `<version>` required:
 
+Use the latest release for `X.Y.Z` (the root [README](../README.md#installation) names it), or the
+current `X.Y.Z-SNAPSHOT` from the Central Portal snapshots repository to track `master`. This file
+deliberately does not hardcode either: it is not covered by the release job's README version sync,
+so a literal here goes stale the moment a release lands.
+
 ```xml
 <dependencyManagement>
   <dependencies>
     <dependency>
       <groupId>io.github.achird-labs</groupId>
       <artifactId>rift-java-bom</artifactId>
-      <version>0.1.3-SNAPSHOT</version>
+      <version>X.Y.Z</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>

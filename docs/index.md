@@ -6,7 +6,8 @@ Mountebank-compatible HTTP/HTTPS mock server written in Rust.
 One client, three transports — **embedded** (in-process, no Docker), **connect** (any running Rift
 admin endpoint), and **spawn** (a managed `rift` binary) — with the full engine surface on each:
 stubs, predicates, responses, response cycling, behaviors, proxy record/playback, fault injection,
-stateful scenarios, request verification, and TLS-MITM intercept.
+stateful scenarios, spaces/flow-state, request verification, a server-side event stream, and
+TLS-MITM intercept.
 
 ```java
 import static io.github.achirdlabs.rift.dsl.RiftDsl.*;
