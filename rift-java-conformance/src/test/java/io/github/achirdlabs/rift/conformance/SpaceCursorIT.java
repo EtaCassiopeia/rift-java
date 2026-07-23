@@ -5,7 +5,6 @@ import io.github.achirdlabs.rift.RecordedPage;
 import io.github.achirdlabs.rift.RecordedRequest;
 import io.github.achirdlabs.rift.Rift;
 import io.github.achirdlabs.rift.Space;
-import io.github.achirdlabs.rift.SpawnOptions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 
@@ -17,13 +16,14 @@ import java.time.Duration;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static io.github.achirdlabs.rift.conformance.LiveEngine.engine;
+import static io.github.achirdlabs.rift.conformance.LiveEngine.gated;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.imposter;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.inMemoryFlowState;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.okJson;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.onGet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * {@code Space.recordedPage()}/{@code recordedSince()} against a real engine (#149): the space tail
@@ -38,14 +38,6 @@ class SpaceCursorIT {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private static final String FLOW_HEADER = "X-Flow-Id";
-
-    /** The engine for the selected lane; corpus-free, so not {@link ConformanceTransport#engine}. */
-    private static Rift engine() {
-        return switch (ConformanceTransport.selected()) {
-            case SPAWN -> Rift.spawn(SpawnOptions.builder().build());
-            case EMBEDDED -> Rift.embedded();
-        };
-    }
 
     @TestFactory
     Stream<DynamicTest> aSpaceTailFollowsOnlyItsOwnTrafficOnTheImpostersCursor() {
@@ -99,26 +91,5 @@ class SpaceCursorIT {
                         .header(FLOW_HEADER, flowId).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(200, response.statusCode(), "the request must be served, so it is recorded");
-    }
-
-    /** Reports the two skip conditions separately so a lane that silently lost RIFT_IT is diagnosable. */
-    private static Stream<DynamicTest> gated(String name, Executable body) {
-        return Stream.of(DynamicTest.dynamicTest(name, () -> {
-            assumeTrue(integrationEnabled(), "set RIFT_IT=1 to run the live-engine space lane");
-            ConformanceTransport lane = ConformanceTransport.selected();
-            assumeTrue(lane.isAvailable(),
-                    "the " + lane + " lane cannot start an engine here (embedded needs a librift_ffi)");
-            body.run();
-        }));
-    }
-
-    @FunctionalInterface
-    private interface Executable {
-        void run() throws Exception;
-    }
-
-    private static boolean integrationEnabled() {
-        String it = System.getenv("RIFT_IT");
-        return it != null && !it.isBlank() && !it.equals("0");
     }
 }
