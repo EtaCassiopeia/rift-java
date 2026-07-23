@@ -106,13 +106,18 @@ public interface Rift extends AutoCloseable {
      *
      * <p>The caller owns the connection: close the returned stream to release it. Closing this
      * {@code Rift} does not close streams it opened — they hold their own connections and outlive it
-     * until closed.
+     * until closed. The embedded transport is the one exception, and unavoidably so: there the
+     * engine serving the stream lives inside this process, so closing the {@code Rift} stops it and
+     * iteration then fails with {@link io.github.achirdlabs.rift.error.EngineUnavailable} — the
+     * ordinary disconnect path, loud rather than a quiet end.
+     *
+     * <p>Works on every transport, embedded included: the in-process engine starts its own admin
+     * server on demand and streams from that, so the first call there pays that start-up.
      *
      * @throws UnsupportedOperationException if this engine connection cannot stream — an engine too
-     *                                       old to serve {@code /events}, or the in-process embedded
-     *                                       transport, which has no admin HTTP server. Both mean the
-     *                                       same thing: poll instead, which is a supported baseline
-     *                                       rather than a degraded mode.
+     *                                       old to serve {@code /events}. That means poll instead,
+     *                                       which is a supported baseline rather than a degraded
+     *                                       mode.
      * @see EventStream
      */
     EventStream events(EventStreamOptions options);

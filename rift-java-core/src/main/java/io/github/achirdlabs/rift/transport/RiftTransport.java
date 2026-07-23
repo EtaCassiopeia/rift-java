@@ -94,10 +94,12 @@ public interface RiftTransport extends AutoCloseable {
      *
      * <p>The default serves the full list and reports no cursor, which is exactly what an engine
      * without cursor support does over HTTP. It is the honest answer for any transport that cannot
-     * see response headers — notably the in-process FFI one, where there is no HTTP response to read
-     * and rift#603 expects consumers to poll. Synthesizing an index from an array offset here would
-     * re-introduce the skip-entries bug the cursor exists to remove, so implementations that cannot
-     * obtain a real cursor must leave {@code nextIndex} empty rather than invent one.
+     * obtain an index — notably the in-process FFI one, whose C-ABI has no cursor-bearing read, so
+     * rift#603 expects those consumers to poll. (Not a claim that it has no admin surface: it can
+     * start one and delegate, as {@code events} does — see #175 for closing this gap the same way.)
+     * Synthesizing an index from an array offset here would re-introduce the skip-entries bug the
+     * cursor exists to remove, so implementations that cannot obtain a real cursor must leave
+     * {@code nextIndex} empty rather than invent one.
      *
      * <p>Clauses get no such fallback: the default <b>refuses</b> them rather than serving an
      * unfiltered list. Widening a filter silently would hand back the very entries the caller asked
@@ -176,10 +178,12 @@ public interface RiftTransport extends AutoCloseable {
      * {@link JsonValue}: a long-lived stream has no JSON envelope to hand back, and re-framing SSE
      * through a raw layer only to re-parse it above would buy nothing.
      *
-     * <p>The default refuses. Streaming is an admin-HTTP capability, so a transport without one —
-     * the in-process FFI transport — has no stream to emulate; rift#461 expects those consumers to
-     * poll. That is the same answer an engine too old to serve {@code /events} gives, and both
-     * collapse to one signal because the caller's move is identical: poll instead.
+     * <p>The default refuses. Streaming is an admin-HTTP capability, so a transport that can reach
+     * no admin server has no stream to emulate; rift#461 expects those consumers to poll. That is
+     * the same answer an engine too old to serve {@code /events} gives, and both collapse to one
+     * signal because the caller's move is identical: poll instead. Every transport the SDK ships
+     * overrides this — the in-process FFI transport included, since it can start an admin server of
+     * its own and delegate (#174).
      *
      * @throws UnsupportedOperationException if this transport cannot stream
      */
