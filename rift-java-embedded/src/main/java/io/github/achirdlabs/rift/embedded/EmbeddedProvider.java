@@ -23,9 +23,19 @@ public final class EmbeddedProvider implements EmbeddedEngineProvider {
     @Override
     public EmbeddedEngine start(EmbeddedOptions options) {
         NativeLibraryResolver.ResolvedLibrary resolved = NativeLibraryResolver.resolve(options);
-        EmbeddedTransport transport = EmbeddedTransport.open(resolved.path());
+        EmbeddedTransport transport = EmbeddedTransport.open(resolved.path(), options);
         if (options.serveAdminEagerly()) {
-            transport.adminUri();
+            try {
+                transport.adminUri();
+            } catch (RuntimeException e) {
+                // The engine handle and the mapped library are already live, and the onClose that
+                // deletes an extracted temp library does not exist yet — so without this the caller
+                // gets an exception and leaks both. Eager start exists to surface a bad adminPort or
+                // adminHost here rather than at first use (#176), which makes this throw a normal
+                // outcome rather than a remote one.
+                closeQuietly(transport, resolved);
+                throw e;
+            }
         }
         Runnable onClose = resolved.temporary()
                 ? () -> {
@@ -40,5 +50,26 @@ public final class EmbeddedProvider implements EmbeddedEngineProvider {
                 }
                 : () -> { };
         return new EmbeddedEngine(transport, onClose);
+    }
+
+    /**
+     * Releases the engine handle and any extracted library on a failed start. Suppresses its own
+     * failures onto the original exception: that one explains why the engine did not start, and
+     * losing it to a cleanup error would leave the caller with the less useful of the two.
+     */
+    private static void closeQuietly(EmbeddedTransport transport, NativeLibraryResolver.ResolvedLibrary resolved) {
+        try {
+            transport.close();
+        } catch (RuntimeException closeFailure) {
+            LOG.log(Level.DEBUG, "failed to close the embedded transport after a failed start", closeFailure);
+        }
+        if (resolved.temporary()) {
+            try {
+                Files.deleteIfExists(resolved.path());
+            } catch (IOException e) {
+                LOG.log(Level.DEBUG, "failed to delete extracted native library " + resolved.path()
+                        + " after a failed start; relying on deleteOnExit", e);
+            }
+        }
     }
 }
