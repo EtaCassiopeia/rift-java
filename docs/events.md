@@ -17,8 +17,7 @@ try (EventStream events = rift.events(EventStreamOptions.builder()
 The stream is an `Iterable<RiftEvent>` and an `AutoCloseable`. Iterating blocks until the next event
 arrives, so a tail normally runs on its own thread; closing the stream ends the iteration.
 
-Requires an admin endpoint, so this works on the **connected** and **spawned** transports. The
-in-process embedded transport has no admin HTTP surface and refuses rather than pretending — see
+This works on every transport, the in-process embedded engine included — see
 [Transports](#transport-support) below.
 
 ## Choosing what arrives
@@ -117,6 +116,13 @@ try (EventStream events = rift.events(options)) {
 `RecordedPage.nextIndex()` is opaque — pass it back verbatim; never synthesize one from a list
 offset. See [Cursor reads](spaces.md#cursor-reads-over-the-journal).
 
+**This recipe needs a cursor, and the embedded transport reports none.** `Rift.embedded()` streams
+events, but its `recordedSince` always hands back an empty `nextIndex()` — so the `orElse(0)` above
+pins `cursor` at 0 and every recovery re-reads the whole journal instead of just the gap. The loop
+still converges; it replays rather than resumes. Use a connected or spawned engine when you need the
+reconcile loop, and track [rift-java#175](https://github.com/achird-labs/rift-java/issues/175) for
+the cursor itself.
+
 ## Timeouts and reconnection
 
 A stream that has gone quiet is indistinguishable from a stream whose connection died, so the engine
@@ -135,7 +141,19 @@ would paper over that hole. Reconnect explicitly and re-baseline from the cursor
 |---|---|
 | `Rift.connect(uri)` | Yes |
 | `Rift.spawn()` | Yes |
-| `Rift.embedded()` | No — the in-process engine exposes no admin HTTP endpoint, so the call refuses with `UnsupportedOperationException` rather than returning an empty stream that would look like "nothing is happening" |
+| `Rift.embedded()` | Yes — the in-process engine starts an admin server of its own on demand and streams from that. The events are the same ones: the stream taps the engine's event bus, which the in-process imposters publish to whether they are driven over HTTP or through the FFI data plane. Caveat: `recordedSince` reports no cursor here, so the [reconcile loop](#reconciling-with-the-journal) replays rather than resumes |
 
-That refusal is the same principle the filtered cursor reads follow: a transport that cannot answer
-the question says so, instead of returning a plausible-looking answer that is wrong.
+The first `events()` call on an embedded engine pays that admin server's start-up. Build the engine
+with `EmbeddedOptions.serveAdminEagerly(true)` to pay it at startup instead — useful when the first
+event matters to within milliseconds.
+
+One lifecycle difference is worth knowing. On the connected and spawned transports a stream outlives
+the `Rift` that opened it, because it holds its own connection to a separate process. On the embedded
+transport the engine *is* this process, so closing the `Rift` stops the engine and ends the stream
+with it — iteration then throws `EngineUnavailable`, the same loud disconnect it reports for a
+spawned engine that goes away. Close streams before closing the engine.
+
+What still refuses is an engine too old to serve `/events`: that throws `UnsupportedOperationException`
+rather than returning an empty stream that would look like "nothing is happening". Same principle the
+filtered cursor reads follow — a connection that cannot answer the question says so, instead of
+returning a plausible-looking answer that is wrong.

@@ -256,8 +256,9 @@ rift_update_stub`, `deleteStub→rift_delete_stub`, `clearRecorded→rift_clear_
 `clearProxyResponses→rift_clear_proxy_recordings`, `enable`/`disable→
 rift_set_imposter_enabled`, `scenarios→rift_scenarios`, `setScenarioState→
 rift_set_scenario_state`, `resetScenarios→rift_reset_scenarios`, `verify→rift_verify`,
-`stubWarnings→rift_stub_warnings`. Only `replaceAllImposters` (bulk `PUT /imposters`, no C-ABI
-counterpart) still routes through the lazily-started in-process admin server. Ownership
+`stubWarnings→rift_stub_warnings`. The two operations with no C-ABI counterpart —
+`replaceAllImposters` (bulk `PUT /imposters`) and `events` (`GET /events`) — still route through
+the lazily-started in-process admin server. Ownership
 discipline (per-call confined arenas, `rift_free`, sentinel + same-thread `rift_last_error`,
 static `build_info` never freed, symbol-probe for graceful degradation) is encapsulated once in
 the bridge (issue #8).
@@ -733,9 +734,14 @@ Reconnect policy is the caller's: a retry schedule belongs to whatever drives th
 `match(MatchClause...)` (§8.2 — request events only), `idleTimeout(Duration)`.
 
 Capability probe: `events()` throws `UnsupportedOperationException` when streaming is unavailable —
-an engine too old to serve `/events` (404) or the embedded transport (no admin HTTP server). Both
-collapse to one signal because the caller's move is identical: poll, which is the supported
+an engine too old to serve `/events` (404). The caller's move is to poll, which is the supported
 baseline, not a degraded mode.
+
+Transport coverage is total, embedded included: the FFI transport delegates `events()` to the same
+lazily-started in-process admin server it already delegates `replaceAllImposters` to, and that
+server's stream taps the engine's admin event bus — which hangs off the imposter manager, so the
+FFI data plane's own traffic and lifecycle changes publish to it. The cost is that the first
+`events()` call there starts that server, unless `EmbeddedOptions.serveAdminEagerly` already did.
 
 Transport note: the SPI's `events()` returns the typed stream rather than raw `JsonValue` — a
 long-lived stream has no JSON envelope to hand back. Its reader is one daemon thread per stream

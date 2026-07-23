@@ -8,6 +8,7 @@ import io.github.achirdlabs.rift.RecordedRequest;
 import io.github.achirdlabs.rift.Rift;
 import io.github.achirdlabs.rift.RiftEvent;
 import io.github.achirdlabs.rift.SpawnOptions;
+import io.github.achirdlabs.rift.error.EngineUnavailable;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 
@@ -25,6 +26,7 @@ import static io.github.achirdlabs.rift.dsl.RiftDsl.okJson;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.onGet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -34,17 +36,30 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * emits parse into these events, and that the stream's {@code index} is the same journal index the
  * polling side reports, which is the entire basis of the reconcile story.
  *
- * <p>Gated to {@link ConformanceTransport#SPAWN}: {@code /events} is an admin-HTTP endpoint the
- * in-process FFI transport does not serve. Needs no corpus, just {@code RIFT_IT=1}.
+ * <p>Runs on every transport lane. {@code /events} is an admin-HTTP endpoint, but the embedded
+ * transport has one — its lazily-started in-process admin server taps the same event bus the
+ * FFI-driven imposters publish to (#174) — so the embedded lane proves that claim rather than
+ * assuming it. Needs no corpus, just {@code RIFT_IT=1}.
  */
 class EventStreamIT {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
+    /**
+     * The engine for the selected lane. Deliberately not {@link ConformanceTransport#engine} — that
+     * one is parameterised by the corpus, and this suite needs none.
+     */
+    private static Rift engine() {
+        return switch (ConformanceTransport.selected()) {
+            case SPAWN -> Rift.spawn(SpawnOptions.builder().build());
+            case EMBEDDED -> Rift.embedded();
+        };
+    }
+
     @TestFactory
     Stream<DynamicTest> theStreamPushesWhatTheJournalRecords() {
         return gated("events arrive, and carry the journal's own index", () -> {
-            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+            try (Rift rift = engine()) {
                 Imposter imp = recordingImposter(rift);
 
                 try (EventStream events = rift.events(EventStreamOptions.builder().port(imp.port()).build())) {
@@ -52,9 +67,15 @@ class EventStreamIT {
 
                     RiftEvent.Hello hello = assertInstanceOf(RiftEvent.Hello.class, it.next(),
                             "the engine opens with hello");
-                    // The hello envelope reports the version we pinned and spawned — assert against
-                    // the pin itself so this stays a drift-catcher rather than a hardcoded prefix.
-                    assertEquals(io.github.achirdlabs.rift.RiftVersion.engineVersion(), hello.engineVersion());
+                    if (ConformanceTransport.selected() == ConformanceTransport.SPAWN) {
+                        // The hello envelope reports the version we pinned and spawned — assert
+                        // against the pin itself so this stays a drift-catcher rather than a
+                        // hardcoded prefix. Not asserted on the embedded lane: there the cdylib
+                        // comes from RIFT_FFI_LIB and may legitimately be a local dev build
+                        // reporting the 0.1.0 placeholder — a mismatch the SDK itself demotes to a
+                        // warning even in FAIL mode, so this must not be stricter than the product.
+                        assertEquals(io.github.achirdlabs.rift.RiftVersion.engineVersion(), hello.engineVersion());
+                    }
 
                     get(imp.uri() + "/pushed");
 
@@ -67,8 +88,20 @@ class EventStreamIT {
                     // number. If they were not, reconciling from a stream index would silently skip
                     // or replay, which is the bug the cursor exists to remove.
                     RecordedPage page = imp.recordedPage();
-                    assertEquals(page.nextIndex(), pushed.index(),
-                            "the stream's index IS the journal cursor");
+                    if (ConformanceTransport.selected() == ConformanceTransport.EMBEDDED) {
+                        // There is no polled cursor to agree with — the embedded transport inherits
+                        // RiftTransport's cursor-less recordedSince (#175). Two assertions still
+                        // bite: the stream really does carry an index (the engine publishes it from
+                        // the manager, so it does not depend on the transport), and the polling side
+                        // reports no cursor rather than inventing one.
+                        assertTrue(pushed.index().isPresent(),
+                                "the delegated stream still carries the journal index");
+                        assertTrue(page.nextIndex().isEmpty(),
+                                "a cursor-less transport must report no cursor, not a made-up one");
+                    } else {
+                        assertEquals(page.nextIndex(), pushed.index(),
+                                "the stream's index IS the journal cursor");
+                    }
                 }
             }
         });
@@ -76,8 +109,8 @@ class EventStreamIT {
 
     @TestFactory
     Stream<DynamicTest> aBrokenStreamIsRecoveredByPollingFromTheLastIndexSeen() {
-        return gated("the reconcile loop, end to end", () -> {
-            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+        return needsCursor("the reconcile loop, end to end", () -> {
+            try (Rift rift = engine()) {
                 Imposter imp = recordingImposter(rift);
                 long cursor;
 
@@ -107,7 +140,7 @@ class EventStreamIT {
     @TestFactory
     Stream<DynamicTest> lifecycleEventsArriveOnTheSameStream() {
         return gated("an imposter change is pushed too", () -> {
-            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+            try (Rift rift = engine()) {
                 Imposter imp = recordingImposter(rift);
 
                 try (EventStream events = rift.events(EventStreamOptions.builder()
@@ -122,7 +155,40 @@ class EventStreamIT {
                             assertInstanceOf(RiftEvent.ImposterChanged.class, it.next());
                     assertEquals(RiftEvent.ImposterChanged.Action.STUBS_CHANGED, changed.action());
                     assertEquals(imp.port(), changed.port().orElseThrow());
+
+                    // A second, independently created imposter must surface on the SAME
+                    // subscription. That is the actual claim — one event bus behind the whole data
+                    // plane — and one imposter cannot distinguish it from a stream that happens to
+                    // be scoped to whatever imposter existed when it was opened.
+                    Imposter other = rift.create(imposter("events-2")
+                            .protocol("http")
+                            .stub(onGet("/other").willReturn(okJson("{}"))));
+
+                    RiftEvent.ImposterChanged created =
+                            assertInstanceOf(RiftEvent.ImposterChanged.class, it.next());
+                    assertEquals(RiftEvent.ImposterChanged.Action.CREATED, created.action());
+                    assertEquals(other.port(), created.port().orElseThrow());
                 }
+            }
+        });
+    }
+
+    @TestFactory
+    Stream<DynamicTest> closingTheEngineEndsAnOpenStreamLoudly() {
+        return gated("an engine that goes away is reported, not just an end of iteration", () -> {
+            Rift rift = engine();
+            try (EventStream events = rift.events(EventStreamOptions.builder().build())) {
+                Iterator<RiftEvent> it = events.iterator();
+                assertInstanceOf(RiftEvent.Hello.class, it.next());
+
+                rift.close();
+
+                // Loud, not quiet. A tail cannot distinguish "nothing is happening" from "the
+                // engine is gone", so the stream must raise rather than report exhaustion. This
+                // matters most on the embedded lane, where the engine IS this process and closing
+                // the Rift therefore always ends the stream — the one place Rift.events' "streams
+                // outlive the client" contract cannot hold.
+                assertThrows(EngineUnavailable.class, it::hasNext);
             }
         });
     }
@@ -141,12 +207,28 @@ class EventStreamIT {
         assertEquals(200, response.statusCode(), "the request must be served, so it is recorded");
     }
 
+    /**
+     * As {@link #gated}, plus a journal cursor. Reconciling a gap is a claim about the *polling*
+     * side, not the stream: it needs {@code recordedSince} to honour a cursor, and the embedded
+     * transport has none — it inherits {@link io.github.achirdlabs.rift.transport.RiftTransport}'s
+     * cursor-less default, which answers a since-query with the whole journal and an empty cursor.
+     * So this is a SPAWN-lane claim until that gap is closed, not something {@code /events} can fix.
+     */
+    private static Stream<DynamicTest> needsCursor(String name, Executable body) {
+        return gated(name, () -> {
+            assumeTrue(ConformanceTransport.selected() == ConformanceTransport.SPAWN,
+                    "reconciling needs a recordedSince cursor; the embedded transport reports none");
+            body.run();
+        });
+    }
+
     /** Reports the two skip conditions separately so a lane that silently lost RIFT_IT is diagnosable. */
     private static Stream<DynamicTest> gated(String name, Executable body) {
         return Stream.of(DynamicTest.dynamicTest(name, () -> {
             assumeTrue(integrationEnabled(), "set RIFT_IT=1 to run the live-engine event-stream lane");
-            assumeTrue(ConformanceTransport.selected() == ConformanceTransport.SPAWN,
-                    "/events is an admin-HTTP endpoint; the FFI transport serves none — SPAWN lane only");
+            ConformanceTransport lane = ConformanceTransport.selected();
+            assumeTrue(lane.isAvailable(),
+                    "the " + lane + " lane cannot start an engine here (embedded needs a librift_ffi)");
             body.run();
         }));
     }

@@ -1,5 +1,7 @@
 package io.github.achirdlabs.rift.embedded;
 
+import io.github.achirdlabs.rift.EventStream;
+import io.github.achirdlabs.rift.EventStreamOptions;
 import io.github.achirdlabs.rift.error.EngineError;
 import io.github.achirdlabs.rift.json.JsonNumber;
 import io.github.achirdlabs.rift.json.JsonObject;
@@ -20,9 +22,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@link RiftTransport} over the in-process rift engine via the Panama FFM C-ABI v2. Every
  * admin-API operation with a direct C-ABI v2 entry point — imposter lifecycle, recording,
  * flow-state, spaces, per-stub CRUD, listing, scenarios, enable/disable, verify, and stub
- * warnings — is driven directly through {@code librift_ffi}. Only {@link #replaceAllImposters}
- * (bulk {@code PUT /imposters}, with no C-ABI counterpart) is delegated to a lazily-started
- * in-process admin server over {@link RemoteTransport}.
+ * warnings — is driven directly through {@code librift_ffi}. The two operations with no C-ABI
+ * counterpart — {@link #replaceAllImposters} (bulk {@code PUT /imposters}) and {@link #events}
+ * (the {@code GET /events} SSE stream) — are delegated to a lazily-started in-process admin server
+ * over {@link RemoteTransport}.
  */
 public final class EmbeddedTransport implements RiftTransport {
 
@@ -82,6 +85,20 @@ public final class EmbeddedTransport implements RiftTransport {
     @Override
     public void replaceAllImposters(JsonValue doc) {
         admin().replaceAllImposters(doc);
+    }
+
+    /**
+     * The delegated stream carries this handle's own traffic: the admin server's {@code /events}
+     * taps the engine's admin event bus, which lives on the imposter manager the FFI data plane
+     * already drives — so events published by directly-driven imposters are what arrives here.
+     *
+     * <p>Two consequences worth knowing: request events still require the imposter to have been
+     * created with {@code recordRequests: true}, and the first call pays the in-process admin
+     * server's start-up (set {@code EmbeddedOptions.serveAdminEagerly} to pay it at startup instead).
+     */
+    @Override
+    public EventStream events(EventStreamOptions options) {
+        return admin().events(options);
     }
 
     @Override
