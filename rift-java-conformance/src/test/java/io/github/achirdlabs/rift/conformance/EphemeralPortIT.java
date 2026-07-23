@@ -13,13 +13,13 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.stream.Stream;
 
+import static io.github.achirdlabs.rift.conformance.LiveEngine.gatedTo;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.imposter;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.okJson;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.onGet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * The property that lets every other IT drop its fixed port (#162): an imposter created without one
@@ -29,15 +29,24 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * engine actually delivers it. The second half is what the issue was really about — two imposters
  * created the same way must land on <em>different</em> ports, so classes can no longer collide with
  * each other (two of them had been given 4597) or with whatever else happens to hold a number.
+ *
+ * <p>SPAWN-only because these tests call {@link io.github.achirdlabs.rift.Rift#spawn} directly — the
+ * property under test is the engine's own port assignment, so the test drives a real engine process
+ * rather than a transport.
  */
 class EphemeralPortIT {
+
+    /** Why this suite is one-lane. Stated once; both cases here are about the spawned engine. */
+    private static final String SPAWN_ONLY =
+            "spawns a real engine over the admin API — SPAWN lane only";
 
     private static final HttpClient HTTP =
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
     @TestFactory
     Stream<DynamicTest> anEngineAssignedPortIsReportedBackAndServes() {
-        return gated("an imposter with no port is assigned one that works", () -> {
+        return gatedTo(ConformanceTransport.SPAWN, SPAWN_ONLY,
+                "an imposter with no port is assigned one that works", () -> {
             try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
                 Imposter imp = rift.create(imposter("ephemeral")
                         .stub(onGet("/ping").willReturn(okJson("{\"ok\":true}"))));
@@ -53,7 +62,8 @@ class EphemeralPortIT {
 
     @TestFactory
     Stream<DynamicTest> twoPortlessImpostersNeverLandOnTheSamePort() {
-        return gated("two port-less imposters coexist on distinct ports", () -> {
+        return gatedTo(ConformanceTransport.SPAWN, SPAWN_ONLY,
+                "two port-less imposters coexist on distinct ports", () -> {
             try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
                 Imposter first = rift.create(imposter("ephemeral-a")
                         .stub(onGet("/who").willReturn(okJson("{\"who\":\"a\"}"))));
@@ -77,30 +87,5 @@ class EphemeralPortIT {
                 .build();
         HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
         return response.statusCode();
-    }
-
-    /**
-     * SPAWN-only because these tests call {@link Rift#spawn} directly — the property under test is
-     * the engine's own port assignment, so the test drives a real engine process rather than a
-     * transport. Reports the two skip conditions separately so a lane that silently lost RIFT_IT is
-     * diagnosable.
-     */
-    private static Stream<DynamicTest> gated(String name, Executable body) {
-        return Stream.of(DynamicTest.dynamicTest(name, () -> {
-            assumeTrue(integrationEnabled(), "set RIFT_IT=1 to run the live-engine lane");
-            assumeTrue(ConformanceTransport.selected() == ConformanceTransport.SPAWN,
-                    "spawns a real engine over the admin API — SPAWN lane only");
-            body.run();
-        }));
-    }
-
-    @FunctionalInterface
-    private interface Executable {
-        void run() throws Exception;
-    }
-
-    private static boolean integrationEnabled() {
-        String it = System.getenv("RIFT_IT");
-        return it != null && !it.isBlank() && !it.equals("0");
     }
 }

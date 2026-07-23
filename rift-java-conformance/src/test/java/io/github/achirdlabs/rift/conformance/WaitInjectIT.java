@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
+import static io.github.achirdlabs.rift.conformance.LiveEngine.integrationEnabled;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.imposter;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.okJson;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.onGet;
@@ -179,10 +180,5 @@ class WaitInjectIT {
     @FunctionalInterface
     private interface WaitFormCase {
         void run(String name, UnaryOperator<IsSpec> form) throws Exception;
-    }
-
-    private static boolean integrationEnabled() {
-        String it = System.getenv("RIFT_IT");
-        return it != null && !it.isBlank() && !it.equals("0");
     }
 }

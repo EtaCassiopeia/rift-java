@@ -7,7 +7,6 @@ import io.github.achirdlabs.rift.RecordedPage;
 import io.github.achirdlabs.rift.RecordedRequest;
 import io.github.achirdlabs.rift.Rift;
 import io.github.achirdlabs.rift.RiftEvent;
-import io.github.achirdlabs.rift.SpawnOptions;
 import io.github.achirdlabs.rift.error.EngineUnavailable;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
@@ -21,6 +20,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static io.github.achirdlabs.rift.conformance.LiveEngine.engine;
+import static io.github.achirdlabs.rift.conformance.LiveEngine.gated;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.imposter;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.okJson;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.onGet;
@@ -28,7 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * The admin event stream against a real engine. The unit tests pin framing and lifecycle against a
@@ -44,17 +44,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class EventStreamIT {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-
-    /**
-     * The engine for the selected lane. Deliberately not {@link ConformanceTransport#engine} — that
-     * one is parameterised by the corpus, and this suite needs none.
-     */
-    private static Rift engine() {
-        return switch (ConformanceTransport.selected()) {
-            case SPAWN -> Rift.spawn(SpawnOptions.builder().build());
-            case EMBEDDED -> Rift.embedded();
-        };
-    }
 
     @TestFactory
     Stream<DynamicTest> theStreamPushesWhatTheJournalRecords() {
@@ -193,26 +182,5 @@ class EventStreamIT {
                 HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(20)).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(200, response.statusCode(), "the request must be served, so it is recorded");
-    }
-
-    /** Reports the two skip conditions separately so a lane that silently lost RIFT_IT is diagnosable. */
-    private static Stream<DynamicTest> gated(String name, Executable body) {
-        return Stream.of(DynamicTest.dynamicTest(name, () -> {
-            assumeTrue(integrationEnabled(), "set RIFT_IT=1 to run the live-engine event-stream lane");
-            ConformanceTransport lane = ConformanceTransport.selected();
-            assumeTrue(lane.isAvailable(),
-                    "the " + lane + " lane cannot start an engine here (embedded needs a librift_ffi)");
-            body.run();
-        }));
-    }
-
-    @FunctionalInterface
-    private interface Executable {
-        void run() throws Exception;
-    }
-
-    private static boolean integrationEnabled() {
-        String it = System.getenv("RIFT_IT");
-        return it != null && !it.isBlank() && !it.equals("0");
     }
 }

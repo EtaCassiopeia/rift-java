@@ -15,12 +15,12 @@ import java.time.Duration;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static io.github.achirdlabs.rift.conformance.LiveEngine.gatedTo;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.imposter;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.inMemoryFlowState;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.okJson;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.onGet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * {@code Space.recorded()} against a real engine — the coverage whose absence let it ship calling a
@@ -41,7 +41,9 @@ class SpaceRecordedIT {
 
     @TestFactory
     Stream<DynamicTest> aSpaceReadsOnlyItsOwnTraffic() {
-        return gated("space(flowId).recorded() over a real engine", () -> {
+        return gatedTo(ConformanceTransport.SPAWN,
+                "this asserts an admin-API route; the FFI transport does not serve one — SPAWN lane only",
+                "space(flowId).recorded() over a real engine", () -> {
             try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
                 Imposter imp = rift.create(imposter("space-recorded")
                         .protocol("http")
@@ -78,25 +80,5 @@ class SpaceRecordedIT {
         // Unmatched paths still record (the engine serves Mountebank's empty fallback); the journal,
         // not the stub, is under test.
         assertEquals(200, response.statusCode(), "the request must be served, so it is recorded");
-    }
-
-    /** Reports the two skip conditions separately so a lane that silently lost RIFT_IT is diagnosable. */
-    private static Stream<DynamicTest> gated(String name, Executable body) {
-        return Stream.of(DynamicTest.dynamicTest(name, () -> {
-            assumeTrue(integrationEnabled(), "set RIFT_IT=1 to run the live-engine space lane");
-            assumeTrue(ConformanceTransport.selected() == ConformanceTransport.SPAWN,
-                    "this asserts an admin-API route; the FFI transport does not serve one — SPAWN lane only");
-            body.run();
-        }));
-    }
-
-    @FunctionalInterface
-    private interface Executable {
-        void run() throws Exception;
-    }
-
-    private static boolean integrationEnabled() {
-        String it = System.getenv("RIFT_IT");
-        return it != null && !it.isBlank() && !it.equals("0");
     }
 }

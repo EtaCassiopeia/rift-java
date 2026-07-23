@@ -15,13 +15,13 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.stream.Stream;
 
+import static io.github.achirdlabs.rift.conformance.LiveEngine.gatedTo;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.imposter;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.okJson;
 import static io.github.achirdlabs.rift.dsl.RiftDsl.onGet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * {@link EmbeddedOptions}' admin-plane settings against the real in-process server (#176): the
@@ -34,11 +34,16 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  */
 class EmbeddedAdminPlaneIT {
 
+    /** Why this suite is one-lane. Stated once; every case here is about that one plane. */
+    private static final String EMBEDDED_ONLY =
+            "only the embedded transport has an in-process admin plane to configure";
+
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
     @TestFactory
     Stream<DynamicTest> anApiKeyGuardsTheInProcessAdminPlane() {
-        return gated("the apiKey reaches rift_serve_admin and is enforced", () -> {
+        return gatedTo(ConformanceTransport.EMBEDDED, EMBEDDED_ONLY,
+                "the apiKey reaches rift_serve_admin and is enforced", () -> {
             try (Rift rift = Rift.embedded(EmbeddedOptions.builder().apiKey("s3cret-token").build())) {
                 Imposter imp = recordingImposter(rift);
                 URI admin = rift.adminUri();
@@ -61,7 +66,8 @@ class EmbeddedAdminPlaneIT {
 
     @TestFactory
     Stream<DynamicTest> theAdminPortIsPinnedWhenAsked() {
-        return gated("the adminPort reaches rift_serve_admin", () -> {
+        return gatedTo(ConformanceTransport.EMBEDDED, EMBEDDED_ONLY,
+                "the adminPort reaches rift_serve_admin", () -> {
             int wanted = freePort();
             try (Rift rift = Rift.embedded(EmbeddedOptions.builder().adminPort(wanted).build())) {
                 assertEquals(wanted, rift.adminUri().getPort(),
@@ -72,7 +78,8 @@ class EmbeddedAdminPlaneIT {
 
     @TestFactory
     Stream<DynamicTest> theAdminHostIsHonouredWhenAsked() {
-        return gated("the adminHost reaches rift_serve_admin", () -> {
+        return gatedTo(ConformanceTransport.EMBEDDED, EMBEDDED_ONLY,
+                "the adminHost reaches rift_serve_admin", () -> {
             // Binding the wildcard needs no inbound reachability, so this is safe on a sandboxed
             // runner — and it is decisive: adminUri() is built from the URL the engine reports back,
             // not echoed from these options, so a host that never reached the engine would come
@@ -86,7 +93,8 @@ class EmbeddedAdminPlaneIT {
 
     @TestFactory
     Stream<DynamicTest> theDefaultsAreUnchanged() {
-        return gated("no options still means loopback, ephemeral, unauthenticated", () -> {
+        return gatedTo(ConformanceTransport.EMBEDDED, EMBEDDED_ONLY,
+                "no options still means loopback, ephemeral, unauthenticated", () -> {
             try (Rift rift = Rift.embedded()) {
                 recordingImposter(rift);
                 URI admin = rift.adminUri();
@@ -119,27 +127,5 @@ class EmbeddedAdminPlaneIT {
             builder.header("Authorization", apiKey);
         }
         return HTTP.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-    }
-
-    /** Reports the skip conditions separately so a lane that silently lost RIFT_IT is diagnosable. */
-    private static Stream<DynamicTest> gated(String name, Executable body) {
-        return Stream.of(DynamicTest.dynamicTest(name, () -> {
-            assumeTrue(integrationEnabled(), "set RIFT_IT=1 to run the live-engine admin-plane lane");
-            assumeTrue(ConformanceTransport.selected() == ConformanceTransport.EMBEDDED,
-                    "only the embedded transport has an in-process admin plane to configure");
-            assumeTrue(ConformanceTransport.EMBEDDED.isAvailable(),
-                    "the embedded lane needs a librift_ffi");
-            body.run();
-        }));
-    }
-
-    @FunctionalInterface
-    private interface Executable {
-        void run() throws Exception;
-    }
-
-    private static boolean integrationEnabled() {
-        String it = System.getenv("RIFT_IT");
-        return it != null && !it.isBlank() && !it.equals("0");
     }
 }

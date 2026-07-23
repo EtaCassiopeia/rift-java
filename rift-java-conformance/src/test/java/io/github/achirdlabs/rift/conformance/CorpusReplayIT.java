@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static io.github.achirdlabs.rift.conformance.LiveEngine.integrationEnabled;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
@@ -115,10 +116,5 @@ class CorpusReplayIT {
         }
         return "fidelity-gap: fixture cannot round-trip through the wire model yet (tracked by "
                 + KnownFidelityGaps.tracker(fx.number()).orElse("(untracked)") + ")";
-    }
-
-    private static boolean integrationEnabled() {
-        String it = System.getenv("RIFT_IT");
-        return it != null && !it.isBlank() && !it.equals("0");
     }
 }
