@@ -93,13 +93,13 @@ public interface RiftTransport extends AutoCloseable {
      * been evicted.
      *
      * <p>The default serves the full list and reports no cursor, which is exactly what an engine
-     * without cursor support does over HTTP. It is the honest answer for any transport that cannot
-     * obtain an index — notably the in-process FFI one, whose C-ABI has no cursor-bearing read, so
-     * rift#603 expects those consumers to poll. (Not a claim that it has no admin surface: it can
-     * start one and delegate, as {@code events} does — see #175 for closing this gap the same way.)
-     * Synthesizing an index from an array offset here would re-introduce the skip-entries bug the
-     * cursor exists to remove, so implementations that cannot obtain a real cursor must leave
-     * {@code nextIndex} empty rather than invent one.
+     * without cursor support does over HTTP. It is the honest answer for a transport that can
+     * obtain no index at all; rift#603 expects those consumers to poll. Every transport the SDK
+     * ships overrides it — the in-process FFI one included, which delegates to an admin server of
+     * its own rather than answer from the cursor-less C-ABI (#175). Synthesizing an index from an
+     * array offset here would re-introduce the skip-entries bug the cursor exists to remove, so an
+     * implementation that cannot obtain a real cursor must leave {@code nextIndex} empty rather
+     * than invent one.
      *
      * <p>Clauses get no such fallback: the default <b>refuses</b> them rather than serving an
      * unfiltered list. Widening a filter silently would hand back the very entries the caller asked

@@ -2,6 +2,7 @@ package io.github.achirdlabs.rift.embedded;
 
 import io.github.achirdlabs.rift.EventStream;
 import io.github.achirdlabs.rift.EventStreamOptions;
+import io.github.achirdlabs.rift.MatchClause;
 import io.github.achirdlabs.rift.error.EngineError;
 import io.github.achirdlabs.rift.json.JsonNumber;
 import io.github.achirdlabs.rift.json.JsonObject;
@@ -15,17 +16,20 @@ import java.lang.foreign.Arena;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * {@link RiftTransport} over the in-process rift engine via the Panama FFM C-ABI v2. Every
  * admin-API operation with a direct C-ABI v2 entry point — imposter lifecycle, recording,
  * flow-state, spaces, per-stub CRUD, listing, scenarios, enable/disable, verify, and stub
- * warnings — is driven directly through {@code librift_ffi}. The two operations with no C-ABI
- * counterpart — {@link #replaceAllImposters} (bulk {@code PUT /imposters}) and {@link #events}
- * (the {@code GET /events} SSE stream) — are delegated to a lazily-started in-process admin server
- * over {@link RemoteTransport}.
+ * warnings — is driven directly through {@code librift_ffi}. The operations the C-ABI cannot
+ * express — {@link #replaceAllImposters} (bulk {@code PUT /imposters}), {@link #events} (the
+ * {@code GET /events} SSE stream), and the cursor/clause reads {@link #recordedSince} and the
+ * scoped {@link #clearRecorded(int, java.util.List)} — are delegated to a lazily-started in-process
+ * admin server over {@link RemoteTransport}.
  */
 public final class EmbeddedTransport implements RiftTransport {
 
@@ -141,6 +145,25 @@ public final class EmbeddedTransport implements RiftTransport {
         return calls.recorded(port);
     }
 
+    /**
+     * Delegated to the in-process admin server: the C-ABI has no cursor-bearing journal read, but
+     * {@code GET /imposters/{port}/savedRequests} serves both {@code ?since=} and {@code match=},
+     * and returns the cursor in a response header the C-ABI has no equivalent of (#175).
+     *
+     * <p>Delegated unconditionally, including the bare {@code recordedPage()} form with no cursor
+     * and no clauses. That read is the cursor <em>baseline</em>, so answering it from the C-ABI
+     * would hand back no cursor at the baseline and a real one on the next call — the caller's
+     * first read would look like a transport that cannot tail at all.
+     *
+     * <p>The price is that a read can now fail for reasons unrelated to reading: the first one
+     * starts the admin server, so an environment that cannot bind loopback surfaces that here
+     * rather than at startup. {@code EmbeddedOptions.serveAdminEagerly} moves it back to startup.
+     */
+    @Override
+    public RecordedSlice recordedSince(int port, OptionalLong since, List<MatchClause> match) {
+        return admin().recordedSince(port, since, match);
+    }
+
     @Override
     public JsonValue stubWarnings(int port) {
         return calls.stubWarnings(port);
@@ -154,6 +177,25 @@ public final class EmbeddedTransport implements RiftTransport {
     @Override
     public void clearRecorded(int port) {
         calls.clearRecorded(port);
+    }
+
+    /**
+     * A scoped clear needs the same server-side clause evaluation as {@link #recordedSince}, so it
+     * takes the same route. The unfiltered case stays on the C-ABI: it is the common one, and
+     * routing it through the admin server would start that server for a call that never needed it.
+     *
+     * <p>Splitting on the clause is safe because both arms mean the same thing — an empty clause
+     * list makes the admin form emit {@code DELETE .../savedRequests} with no query, which is
+     * {@code rift_clear_recorded}'s own behaviour — and because the admin server is served by this
+     * handle's imposter manager, so either route mutates one journal, not two.
+     */
+    @Override
+    public void clearRecorded(int port, List<MatchClause> match) {
+        if (match.isEmpty()) {
+            calls.clearRecorded(port);
+            return;
+        }
+        admin().clearRecorded(port, match);
     }
 
     @Override

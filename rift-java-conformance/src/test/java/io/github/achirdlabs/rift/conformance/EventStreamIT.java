@@ -88,20 +88,8 @@ class EventStreamIT {
                     // number. If they were not, reconciling from a stream index would silently skip
                     // or replay, which is the bug the cursor exists to remove.
                     RecordedPage page = imp.recordedPage();
-                    if (ConformanceTransport.selected() == ConformanceTransport.EMBEDDED) {
-                        // There is no polled cursor to agree with — the embedded transport inherits
-                        // RiftTransport's cursor-less recordedSince (#175). Two assertions still
-                        // bite: the stream really does carry an index (the engine publishes it from
-                        // the manager, so it does not depend on the transport), and the polling side
-                        // reports no cursor rather than inventing one.
-                        assertTrue(pushed.index().isPresent(),
-                                "the delegated stream still carries the journal index");
-                        assertTrue(page.nextIndex().isEmpty(),
-                                "a cursor-less transport must report no cursor, not a made-up one");
-                    } else {
-                        assertEquals(page.nextIndex(), pushed.index(),
-                                "the stream's index IS the journal cursor");
-                    }
+                    assertEquals(page.nextIndex(), pushed.index(),
+                            "the stream's index IS the journal cursor");
                 }
             }
         });
@@ -109,7 +97,7 @@ class EventStreamIT {
 
     @TestFactory
     Stream<DynamicTest> aBrokenStreamIsRecoveredByPollingFromTheLastIndexSeen() {
-        return needsCursor("the reconcile loop, end to end", () -> {
+        return gated("the reconcile loop, end to end", () -> {
             try (Rift rift = engine()) {
                 Imposter imp = recordingImposter(rift);
                 long cursor;
@@ -205,21 +193,6 @@ class EventStreamIT {
                 HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(20)).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(200, response.statusCode(), "the request must be served, so it is recorded");
-    }
-
-    /**
-     * As {@link #gated}, plus a journal cursor. Reconciling a gap is a claim about the *polling*
-     * side, not the stream: it needs {@code recordedSince} to honour a cursor, and the embedded
-     * transport has none — it inherits {@link io.github.achirdlabs.rift.transport.RiftTransport}'s
-     * cursor-less default, which answers a since-query with the whole journal and an empty cursor.
-     * So this is a SPAWN-lane claim until that gap is closed, not something {@code /events} can fix.
-     */
-    private static Stream<DynamicTest> needsCursor(String name, Executable body) {
-        return gated(name, () -> {
-            assumeTrue(ConformanceTransport.selected() == ConformanceTransport.SPAWN,
-                    "reconciling needs a recordedSince cursor; the embedded transport reports none");
-            body.run();
-        });
     }
 
     /** Reports the two skip conditions separately so a lane that silently lost RIFT_IT is diagnosable. */

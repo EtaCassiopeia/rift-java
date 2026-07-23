@@ -91,9 +91,10 @@ public interface Imposter {
      * {@return everything retained that every clause accepts, plus the cursor to resume from}
      * Filtering happens engine-side, so the page costs only what it returns.
      *
-     * @throws UnsupportedOperationException if this engine connection cannot filter server-side (the
-     *                                       in-process embedded transport) — it refuses rather than
-     *                                       answering with the entries you asked to exclude
+     * @throws UnsupportedOperationException if this engine connection cannot filter server-side — it
+     *                                       refuses rather than answering with the entries you asked
+     *                                       to exclude. Every transport the SDK ships can, embedded
+     *                                       included; only a custom one need not.
      * @see MatchClause
      */
     RecordedPage recordedPage(MatchClause... filters);

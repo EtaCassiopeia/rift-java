@@ -256,12 +256,12 @@ rift_update_stub`, `deleteStub→rift_delete_stub`, `clearRecorded→rift_clear_
 `clearProxyResponses→rift_clear_proxy_recordings`, `enable`/`disable→
 rift_set_imposter_enabled`, `scenarios→rift_scenarios`, `setScenarioState→
 rift_set_scenario_state`, `resetScenarios→rift_reset_scenarios`, `verify→rift_verify`,
-`stubWarnings→rift_stub_warnings`. The two operations with no C-ABI counterpart —
-`replaceAllImposters` (bulk `PUT /imposters`) and `events` (`GET /events`) — still route through
-the lazily-started in-process admin server. Ownership
-discipline (per-call confined arenas, `rift_free`, sentinel + same-thread `rift_last_error`,
-static `build_info` never freed, symbol-probe for graceful degradation) is encapsulated once in
-the bridge (issue #8).
+`stubWarnings→rift_stub_warnings`. The operations with no C-ABI counterpart — `replaceAllImposters`
+(bulk `PUT /imposters`), `events` (`GET /events`), and the cursor/clause reads `recordedSince` plus
+the scoped `clearRecorded` (`?since=`/`match=`, which the C-ABI cannot express) — still route
+through the lazily-started in-process admin server. Ownership discipline (per-call confined arenas,
+`rift_free`, sentinel + same-thread `rift_last_error`, static `build_info` never freed, symbol-probe
+for graceful degradation) is encapsulated once in the bridge (issue #8).
 
 ## 6. The handle: `Imposter`
 
@@ -614,13 +614,15 @@ space cursor and an imposter cursor are the same number and interchangeable, and
 cursor advances even while only *other* flows record (the engine advances past filter-rejected
 entries). A caller-supplied `flow_id` clause is rejected with `IllegalArgumentException`: clauses
 AND, so a second `flow_id` either duplicates the scope or silently selects nothing. Because the
-`flow_id` clause is always present, every space cursor call is a *filtered* read — on a transport
-without server-side filtering (FFI) it refuses per §8.2 rather than widening.
+`flow_id` clause is always present, every space cursor call is a *filtered* read — a transport that
+could not filter server-side would refuse per §8.2 rather than widen. All of them can: the FFI
+transport delegates rather than evaluating clauses itself.
 
 Transport SPI: `RiftTransport.recordedSince(port, OptionalLong, List<MatchClause>)` returns the raw
 `RecordedSlice{requests, nextIndex, truncated}`. Its **default** serves the full list with an empty
-cursor, which is exactly what a cursor-less engine does — so the in-process FFI transport, which has
-no HTTP response to read, reports "unsupported" honestly with no code of its own.
+cursor, which is exactly what a cursor-less engine does. Every shipped transport overrides it — the
+in-process FFI one delegates to its own admin server (#175), since the C-ABI carries neither the
+cursor nor the clauses.
 
 ### 8.2 `MatchClause` — server-side filtering
 
@@ -673,10 +675,11 @@ splits a query pair on its first `=` and decodes only afterwards, so the `:`/`=`
 its structure survive while a `%`, `&` or space in a caller's value cannot escape into the query. A
 space must ride as `%20` — the engine decodes URIs, not forms, so `+` would stay a literal `+`.
 
-A transport that cannot filter server-side (the FFI one) **refuses** a filtered read or scoped clear
-rather than widening it: answering unfiltered would return the entries the caller excluded, and a
-widened clear would delete the ones they kept. Neither is expressible client-side anyway — a
-recorded entry carries no resolved flow id.
+A transport that could not filter server-side would **refuse** a filtered read or scoped clear rather
+than widen it: answering unfiltered would return the entries the caller excluded, and a widened clear
+would delete the ones they kept. Neither is expressible client-side anyway — a recorded entry carries
+no resolved flow id. Every transport the SDK ships can filter, the FFI one by delegating (#175), so
+the refusal is the SPI's contract for a custom transport rather than a state any shipped one is in.
 
 ### 8.3 `EventStream` — the push tail
 

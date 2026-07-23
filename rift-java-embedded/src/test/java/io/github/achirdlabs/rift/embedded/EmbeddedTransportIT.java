@@ -157,8 +157,8 @@ class EmbeddedTransportIT {
 
     @Test
     void adminPlaneReachable() throws Exception {
-        // replaceAllImposters is the only op with no direct C-ABI symbol, so the loopback admin
-        // server must still start on demand.
+        // Several ops have no direct C-ABI symbol — replaceAllImposters, events, and the
+        // cursor/clause reads — so the loopback admin server must still start on demand.
         try (EmbeddedTransport t = open()) {
             URI admin = t.adminUri();
             assertNotNull(admin, "adminUri lazily starts the in-process admin server");

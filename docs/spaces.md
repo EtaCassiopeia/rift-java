@@ -134,8 +134,10 @@ purpose: only the four forms above are constructible, so a clause that the engin
 one that could never match, like a `path` carrying a query string — fails at construction rather than
 becoming a filter that quietly returns nothing forever.
 
-Filtered reads need server-side filtering, so on the in-process embedded transport they refuse with
-`UnsupportedOperationException` rather than answering with the entries you asked to exclude.
+Filtered reads need server-side filtering, and every transport can reach it — the in-process embedded
+transport delegates them to its own admin server rather than evaluating clauses client-side. A
+transport that could do neither would refuse with `UnsupportedOperationException` rather than answer
+with the entries you asked to exclude; widening a filter is never the fallback.
 
 ## Flow ids are never blank
 
