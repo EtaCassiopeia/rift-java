@@ -1,5 +1,6 @@
 package io.github.achirdlabs.rift.embedded;
 
+import io.github.achirdlabs.rift.EmbeddedOptions;
 import io.github.achirdlabs.rift.EventStream;
 import io.github.achirdlabs.rift.EventStreamOptions;
 import io.github.achirdlabs.rift.MatchClause;
@@ -12,11 +13,16 @@ import io.github.achirdlabs.rift.transport.RemoteTransport;
 import io.github.achirdlabs.rift.transport.RiftTransport;
 import io.github.achirdlabs.rift.transport.StubAddress;
 
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.lang.foreign.Arena;
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,22 +39,38 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class EmbeddedTransport implements RiftTransport {
 
+    private static final Logger LOG = System.getLogger(EmbeddedTransport.class.getName());
+
     private final Arena libArena;
     private final FfiCalls calls;
+    private final EmbeddedOptions options;
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final Object adminLock = new Object();
     private volatile RemoteTransport admin;
 
-    private EmbeddedTransport(Arena libArena, FfiCalls calls) {
+    private EmbeddedTransport(Arena libArena, FfiCalls calls, EmbeddedOptions options) {
         this.libArena = libArena;
         this.calls = calls;
+        this.options = options;
     }
 
+    /** Opens the engine with default admin-plane settings: loopback, an OS-assigned port, no api key. */
     public static EmbeddedTransport open(Path lib) {
+        return open(lib, EmbeddedOptions.builder().build());
+    }
+
+    /**
+     * Opens the engine, configuring the in-process admin plane from {@code options} —
+     * {@code adminHost}, {@code adminPort} and {@code apiKey} are handed to {@code rift_serve_admin}
+     * when the plane starts, and the api key is also given to the client that delegates to it (#176).
+     */
+    public static EmbeddedTransport open(Path lib, EmbeddedOptions options) {
+        // Before the arena and the engine handle exist: a null caught later would leak both.
+        Objects.requireNonNull(options, "options");
         Arena libArena = Arena.ofShared();
         RiftFfi ffi = RiftFfi.load(lib, libArena);
         FfiCalls calls = FfiCalls.start(ffi);
-        return new EmbeddedTransport(libArena, calls);
+        return new EmbeddedTransport(libArena, calls, options);
     }
 
     @Override
@@ -300,6 +322,53 @@ public final class EmbeddedTransport implements RiftTransport {
         return admin().adminUri();
     }
 
+    /**
+     * The {@code rift_serve_admin} payload for these options. Package-private and pure so the wire
+     * contract can be pinned without an engine: the engine's {@code ServeOptions} is a camelCase
+     * serde struct of all-optional fields, so a misspelled key is not an error there — it is a
+     * setting that silently reverts to the default, which is the failure #176 removes.
+     *
+     * <p>{@code host} and {@code port} are always sent. They are redundant at their defaults (the
+     * engine's own fallbacks are the same {@code 127.0.0.1} and {@code 0}), but sending them keeps
+     * one code path rather than one per combination of set fields.
+     */
+    static JsonObject serveOptions(EmbeddedOptions options) {
+        return JsonObject.builder()
+                .put("host", new JsonString(options.adminHost()))
+                .put("port", JsonNumber.of(options.adminPort()))
+                // Absent rather than null: the payload then says only what was actually configured.
+                // (An explicit null would also parse — serde maps it to None for an Option — so this
+                // is idiom, not a correctness requirement.)
+                .putIfPresent("apiKey", options.apiKey().map(JsonString::new))
+                .build();
+    }
+
+    /**
+     * Binding wider than loopback with no api key is honoured — refusing would break a container or
+     * isolated-network setup that works today, and would make this SDK stricter than the engine and
+     * its sibling SDKs, which is a portability bug rather than a security policy. But it is not
+     * silent: this plane is the full admin API of an engine inside the caller's own process, and a
+     * single builder call is otherwise the only sign the posture changed.
+     */
+    private void warnIfExposedWithoutAKey() {
+        if (options.apiKey().isPresent()) {
+            return;
+        }
+        try {
+            if (InetAddress.getByName(options.adminHost()).isLoopbackAddress()) {
+                return;
+            }
+        } catch (UnknownHostException e) {
+            // Unresolvable: the engine is about to reject this host itself, with a better message
+            // than a guess here would produce. Nothing to warn about that it will not say louder.
+            return;
+        }
+        LOG.log(Level.WARNING, "the in-process rift admin API is binding " + options.adminHost()
+                + " with no apiKey — anything that can reach that interface can drive this engine,"
+                + " create imposters and start the TLS intercept proxy."
+                + " Set EmbeddedOptions.Builder#apiKey, or bind 127.0.0.1.");
+    }
+
     private RemoteTransport admin() {
         RemoteTransport a = admin;
         if (a != null) {
@@ -308,11 +377,14 @@ public final class EmbeddedTransport implements RiftTransport {
         synchronized (adminLock) {
             a = admin;
             if (a == null) {
-                JsonValue result = calls.serveAdmin(JsonObject.builder().put("port", JsonNumber.of(0)).build());
+                warnIfExposedWithoutAKey();
+                JsonValue result = calls.serveAdmin(serveOptions(options));
                 if (!(result instanceof JsonObject obj && obj.get("adminUrl") instanceof JsonString adminUrl)) {
                     throw new EngineError(-1, "rift_serve_admin did not return an adminUrl: " + result.toJson());
                 }
-                a = new RemoteTransport(URI.create(adminUrl.value()), Optional.empty(), Duration.ofSeconds(30));
+                // The same key the server was just given: a client that could not authenticate to
+                // the plane it configured would break every delegated op the moment one was set.
+                a = new RemoteTransport(URI.create(adminUrl.value()), options.apiKey(), Duration.ofSeconds(30));
                 admin = a;
             }
         }

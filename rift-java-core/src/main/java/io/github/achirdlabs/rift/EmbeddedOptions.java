@@ -6,9 +6,13 @@ import java.util.Optional;
 
 /**
  * Immutable configuration for {@link Rift#embedded(EmbeddedOptions)}: where to find the
- * {@code librift_ffi} native library and how the in-process engine's admin surface (used for the
- * operations with no direct C-ABI entry point, and for imposters' own reported {@code uri()})
- * should be addressed.
+ * {@code librift_ffi} native library, and how the in-process engine's admin surface — used for the
+ * operations with no direct C-ABI entry point, and for imposters' own reported {@code uri()} — is
+ * both configured and addressed.
+ *
+ * <p>{@link Builder#adminHost}, {@link Builder#adminPort} and {@link Builder#apiKey} are handed to
+ * the engine when that admin server starts, so they govern the real listener rather than only how
+ * this client talks to it (#176).
  */
 public final class EmbeddedOptions {
 
@@ -91,17 +95,67 @@ public final class EmbeddedOptions {
             return this;
         }
 
+        /**
+         * The interface the in-process admin server binds, default {@code 127.0.0.1} — an IP
+         * literal such as {@code 127.0.0.1}, {@code 0.0.0.0} or {@code ::1}, <b>not</b> a hostname:
+         * the engine parses {@code host:port} as a socket address, so {@code "localhost"} is a
+         * bind error rather than loopback. It is also the host imposters report in their own
+         * {@code uri()}.
+         *
+         * <p>Loopback is the default deliberately: this server exposes the full admin API of an
+         * engine running inside your own process. Binding it wider is honoured, but pair it with
+         * {@link #apiKey(String)} — otherwise anything that can reach the interface can drive the
+         * engine.
+         */
         public Builder adminHost(String adminHost) {
             this.adminHost = Objects.requireNonNull(adminHost, "adminHost");
             return this;
         }
 
+        /**
+         * The port the in-process admin server binds, default {@code 0} — meaning the OS assigns a
+         * free one, which is what {@link Rift#adminUri()} then reports back.
+         *
+         * <p>Pin it only when something outside this process must find the admin API at a known
+         * address. A pinned port that is already taken fails when the server starts, which by
+         * default is the first call that needs it rather than at startup — pair it with
+         * {@link #serveAdminEagerly(boolean)} to surface that at construction instead.
+         *
+         * @throws IllegalArgumentException if {@code adminPort} is outside {@code 0..65535} — the
+         *                                  engine's field is a {@code u16}, so an out-of-range value
+         *                                  is otherwise a parse error raised far from here, at
+         *                                  whichever call first starts the admin plane
+         */
         public Builder adminPort(int adminPort) {
+            if (adminPort < 0 || adminPort > 65535) {
+                throw new IllegalArgumentException("adminPort must be in 0..65535, was " + adminPort);
+            }
             this.adminPort = adminPort;
             return this;
         }
 
+        /**
+         * Requires this key on every request to the in-process admin server, sent as the
+         * {@code Authorization} header; unset by default, meaning no authentication.
+         *
+         * <p>Worth setting when {@link #adminHost(String)} is not loopback. This SDK's own delegated
+         * calls authenticate themselves, so setting it costs nothing here.
+         *
+         * <p>A blank key is <b>rejected</b>, not treated as "unset". The engine gates on the key
+         * being <em>present</em> and then compares it to the request's {@code Authorization} header
+         * defaulted to the empty string — so a blank key switches authentication on and then matches
+         * every unauthenticated caller. That fails open on a plane the caller believes is locked,
+         * and it is exactly what a {@code getProperty("rift.apiKey", "")} style default produces.
+         * Omit the key to run unauthenticated deliberately.
+         *
+         * @throws IllegalArgumentException if {@code apiKey} is blank
+         */
         public Builder apiKey(String apiKey) {
+            Objects.requireNonNull(apiKey, "apiKey");
+            if (apiKey.isBlank()) {
+                throw new IllegalArgumentException(
+                        "apiKey must not be blank — a blank key authenticates everyone; omit it to run unauthenticated");
+            }
             this.apiKey = Optional.of(apiKey);
             return this;
         }
