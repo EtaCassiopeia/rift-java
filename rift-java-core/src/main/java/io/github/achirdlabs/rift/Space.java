@@ -44,10 +44,10 @@ public interface Space {
      *                                       the space itself is the flow scope, and clauses AND
      *                                       together, so a second {@code flow_id} either duplicates
      *                                       it or silently selects nothing
-     * @throws UnsupportedOperationException if this engine connection cannot filter server-side (the
-     *                                       in-process embedded transport) — the {@code flow_id}
-     *                                       clause is always present, so a space cursor exists only
-     *                                       over the remote admin API
+     * @throws UnsupportedOperationException if this engine connection cannot filter server-side —
+     *                                       the {@code flow_id} clause is always present, so every
+     *                                       space cursor read is a filtered one. Every transport the
+     *                                       SDK ships can filter, embedded included.
      * @see RecordedPage
      */
     RecordedPage recordedPage(MatchClause... filters);

@@ -196,7 +196,7 @@ class RecordedCursorTest {
         assertEquals(JsonValue.parse(TWO_REQUESTS).toJson(), slice.requests().toJson());
     }
 
-    /** Implements only the pre-cursor read, like a third-party transport or the FFI one. */
+    /** Implements only the pre-cursor read, like a third-party transport predating the cursor API. */
     private static final class CursorlessTransport implements RiftTransport {
 
         @Override public JsonValue recorded(int port) { return JsonValue.parse(TWO_REQUESTS); }

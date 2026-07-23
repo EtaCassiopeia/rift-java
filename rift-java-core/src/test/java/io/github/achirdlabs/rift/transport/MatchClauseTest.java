@@ -358,7 +358,7 @@ class MatchClauseTest {
                 () -> cursorless.clearRecorded(4545, List.of(MatchClause.flowId("a"))));
     }
 
-    /** A transport with no server-side filtering, like the in-process FFI one. */
+    /** A transport with no server-side filtering — the SPI default's shape, e.g. a custom transport. */
     private static final class NoFilterTransport implements RiftTransport {
 
         @Override public io.github.achirdlabs.rift.json.JsonValue recorded(int port) {

@@ -30,18 +30,27 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * is the imposter journal cut by {@code flow_id}, and the cursor is the <em>imposter's</em> index —
  * it advances past other flows' entries, which only a live engine can prove.
  *
- * <p>Gated to {@link ConformanceTransport#SPAWN}: {@code match=} filtering is an admin-API surface
- * the in-process FFI transport refuses. Needs no corpus, just {@code RIFT_IT=1}.
+ * <p>Runs on every transport lane. {@code match=} filtering is an admin-API surface, and the
+ * embedded transport now reaches one: it delegates {@code recordedSince} to its in-process admin
+ * server (#175) rather than refusing the clause. Needs no corpus, just {@code RIFT_IT=1}.
  */
 class SpaceCursorIT {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private static final String FLOW_HEADER = "X-Flow-Id";
 
+    /** The engine for the selected lane; corpus-free, so not {@link ConformanceTransport#engine}. */
+    private static Rift engine() {
+        return switch (ConformanceTransport.selected()) {
+            case SPAWN -> Rift.spawn(SpawnOptions.builder().build());
+            case EMBEDDED -> Rift.embedded();
+        };
+    }
+
     @TestFactory
     Stream<DynamicTest> aSpaceTailFollowsOnlyItsOwnTrafficOnTheImpostersCursor() {
         return gated("space cursor page + tail over a real engine", () -> {
-            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+            try (Rift rift = engine()) {
                 Imposter imp = rift.create(imposter("space-cursor")
                         .protocol("http")
                         .record()
@@ -56,7 +65,7 @@ class SpaceCursorIT {
                 assertEquals(List.of("/alice-1"),
                         baseline.requests().stream().map(RecordedRequest::path).toList(),
                         "the baseline sees only alice's traffic");
-                assertTrue(baseline.nextIndex().isPresent(), "a spawned engine reports the cursor");
+                assertTrue(baseline.nextIndex().isPresent(), "every lane reports the cursor");
                 long cursor = baseline.nextIndex().getAsLong();
 
                 // Only bob records; alice's tail stays empty but her cursor must still advance —
@@ -96,8 +105,9 @@ class SpaceCursorIT {
     private static Stream<DynamicTest> gated(String name, Executable body) {
         return Stream.of(DynamicTest.dynamicTest(name, () -> {
             assumeTrue(integrationEnabled(), "set RIFT_IT=1 to run the live-engine space lane");
-            assumeTrue(ConformanceTransport.selected() == ConformanceTransport.SPAWN,
-                    "this asserts an admin-API surface; the FFI transport refuses match= — SPAWN lane only");
+            ConformanceTransport lane = ConformanceTransport.selected();
+            assumeTrue(lane.isAvailable(),
+                    "the " + lane + " lane cannot start an engine here (embedded needs a librift_ffi)");
             body.run();
         }));
     }

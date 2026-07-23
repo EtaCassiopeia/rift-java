@@ -116,12 +116,9 @@ try (EventStream events = rift.events(options)) {
 `RecordedPage.nextIndex()` is opaque — pass it back verbatim; never synthesize one from a list
 offset. See [Cursor reads](spaces.md#cursor-reads-over-the-journal).
 
-**This recipe needs a cursor, and the embedded transport reports none.** `Rift.embedded()` streams
-events, but its `recordedSince` always hands back an empty `nextIndex()` — so the `orElse(0)` above
-pins `cursor` at 0 and every recovery re-reads the whole journal instead of just the gap. The loop
-still converges; it replays rather than resumes. Use a connected or spawned engine when you need the
-reconcile loop, and track [rift-java#175](https://github.com/achird-labs/rift-java/issues/175) for
-the cursor itself.
+This recipe works on every transport, embedded included — its cursor reads are delegated to the same
+in-process admin server the stream comes from, so both halves of the loop report the same journal
+index.
 
 ## Timeouts and reconnection
 
@@ -141,11 +138,12 @@ would paper over that hole. Reconnect explicitly and re-baseline from the cursor
 |---|---|
 | `Rift.connect(uri)` | Yes |
 | `Rift.spawn()` | Yes |
-| `Rift.embedded()` | Yes — the in-process engine starts an admin server of its own on demand and streams from that. The events are the same ones: the stream taps the engine's event bus, which the in-process imposters publish to whether they are driven over HTTP or through the FFI data plane. Caveat: `recordedSince` reports no cursor here, so the [reconcile loop](#reconciling-with-the-journal) replays rather than resumes |
+| `Rift.embedded()` | Yes — the in-process engine starts an admin server of its own on demand and streams from that. The events are the same ones: the stream taps the engine's event bus, which the in-process imposters publish to whether they are driven over HTTP or through the FFI data plane. The [reconcile loop](#reconciling-with-the-journal) works here too — `recordedSince` is delegated to the same admin server, so its cursor is the stream's index |
 
-The first `events()` call on an embedded engine pays that admin server's start-up. Build the engine
-with `EmbeddedOptions.serveAdminEagerly(true)` to pay it at startup instead — useful when the first
-event matters to within milliseconds.
+The first call on an embedded engine that needs that admin server pays its start-up — `events()`, and
+equally the cursor reads the reconcile loop below opens with. Build the engine with
+`EmbeddedOptions.serveAdminEagerly(true)` to pay it at startup instead — useful when the first event
+matters to within milliseconds.
 
 One lifecycle difference is worth knowing. On the connected and spawned transports a stream outlives
 the `Rift` that opened it, because it holds its own connection to a separate process. On the embedded

@@ -32,19 +32,29 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * and that a filtered tail's cursor <em>advances past the entries the filter rejected</em> — the
  * property that stops a filtered tail from re-scanning the same range forever.
  *
- * <p>Gated to {@link ConformanceTransport#SPAWN}: {@code match=} is a query parameter on the admin
- * API, which the in-process FFI transport does not have — it refuses filtered reads rather than
- * answering them unfiltered. Needs no corpus, just {@code RIFT_IT=1}.
+ * <p>Runs on every transport lane. {@code match=} is a query parameter on the admin API, and the
+ * in-process FFI transport reaches one — it delegates filtered reads and scoped clears to its own
+ * admin server (#175) rather than refusing them. Running here on both lanes is what keeps that
+ * delegation honest about the whole clause grammar, not just the single-clause case. Needs no
+ * corpus, just {@code RIFT_IT=1}.
  */
 class MatchClauseIT {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private static final String FLOW_HEADER = "X-Flow-Id";
 
+    /** The engine for the selected lane; corpus-free, so not {@link ConformanceTransport#engine}. */
+    private static Rift engine() {
+        return switch (ConformanceTransport.selected()) {
+            case SPAWN -> Rift.spawn(SpawnOptions.builder().build());
+            case EMBEDDED -> Rift.embedded();
+        };
+    }
+
     @TestFactory
     Stream<DynamicTest> filteredTailAdvancesPastRejectedEntries() {
         return gated("a filtered tail never re-scans what it rejected", () -> {
-            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+            try (Rift rift = engine()) {
                 Imposter imp = recordingImposter(rift);
 
                 // A(flow-1), B(flow-2), C(flow-1): the filter must reject B, and the cursor must
@@ -82,7 +92,7 @@ class MatchClauseIT {
     @TestFactory
     Stream<DynamicTest> headerClauseFiltersOnTheWire() {
         return gated("a header clause is parsed by the engine as written", () -> {
-            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+            try (Rift rift = engine()) {
                 Imposter imp = recordingImposter(rift);
 
                 // The value carries a space and a `=`, which is where a mis-encoded clause breaks:
@@ -101,7 +111,7 @@ class MatchClauseIT {
     @TestFactory
     Stream<DynamicTest> clausesIntersectRatherThanUnion() {
         return gated("two clauses AND on the engine, they do not widen", () -> {
-            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+            try (Rift rift = engine()) {
                 Imposter imp = recordingImposter(rift);
 
                 get(imp.uri() + "/both", "flow-1", "X-Tenant", "acme");
@@ -122,7 +132,7 @@ class MatchClauseIT {
     @TestFactory
     Stream<DynamicTest> scopedClearRemovesOnlyTheMatchingSlice() {
         return gated("a scoped clear keeps what it was not asked to delete", () -> {
-            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+            try (Rift rift = engine()) {
                 Imposter imp = recordingImposter(rift);
 
                 get(imp.uri() + "/a", "flow-1");
@@ -140,7 +150,7 @@ class MatchClauseIT {
     @TestFactory
     Stream<DynamicTest> methodAndPathClausesFilterOnTheWire() {
         return gated("method= and path= are parsed by the engine as written (engine >= 0.15.0)", () -> {
-            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+            try (Rift rift = engine()) {
                 Imposter imp = recordingImposter(rift);
 
                 // Three entries differing on exactly one axis each, so a clause that filtered on the
@@ -171,7 +181,7 @@ class MatchClauseIT {
     @TestFactory
     Stream<DynamicTest> theMethodClauseIsCaseSensitiveOnTheEngine() {
         return gated("a lower-case method clause matches nothing rather than being coerced", () -> {
-            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+            try (Rift rift = engine()) {
                 Imposter imp = recordingImposter(rift);
 
                 send(imp.uri() + "/a", "GET", "flow-1");
@@ -234,8 +244,9 @@ class MatchClauseIT {
     private static Stream<DynamicTest> gated(String name, Executable body) {
         return Stream.of(DynamicTest.dynamicTest(name, () -> {
             assumeTrue(integrationEnabled(), "set RIFT_IT=1 to run the live-engine match= lane");
-            assumeTrue(ConformanceTransport.selected() == ConformanceTransport.SPAWN,
-                    "match= is an admin-API query parameter; the FFI transport has none — SPAWN lane only");
+            ConformanceTransport lane = ConformanceTransport.selected();
+            assumeTrue(lane.isAvailable(),
+                    "the " + lane + " lane cannot start an engine here (embedded needs a librift_ffi)");
             body.run();
         }));
     }

@@ -12,6 +12,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 import java.util.OptionalLong;
 import java.util.stream.Stream;
 
@@ -28,19 +29,27 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * depends on, exercised end-to-end rather than against a fake that could agree with a wrong reading
  * of it.
  *
- * <p>Gated to {@link ConformanceTransport#SPAWN}: the cursor rides in HTTP response headers, so it
- * exists only over the admin API. The in-process FFI transport has no response to read and honestly
- * reports no cursor (the {@code RiftTransport.recordedSince} default) — asserting these semantics
- * there would be asserting against a fallback. Needs no corpus, just {@code RIFT_IT=1}.
+ * <p>Runs on every transport lane. The cursor rides in HTTP response headers, but the embedded
+ * transport reaches an admin API too — it delegates {@code recordedSince} to its in-process admin
+ * server (#175), exactly as it does {@code events} — so these are the same semantics there, not a
+ * fallback. Needs no corpus, just {@code RIFT_IT=1}.
  */
 class RecordedCursorIT {
 
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
+    /** The engine for the selected lane; corpus-free, so not {@link ConformanceTransport#engine}. */
+    private static Rift engine() {
+        return switch (ConformanceTransport.selected()) {
+            case SPAWN -> Rift.spawn(SpawnOptions.builder().build());
+            case EMBEDDED -> Rift.embedded();
+        };
+    }
+
     @TestFactory
     Stream<DynamicTest> cursorContract() {
         return gated("the savedRequests cursor over a real engine", () -> {
-            try (Rift rift = Rift.spawn(SpawnOptions.builder().build())) {
+            try (Rift rift = engine()) {
                 Imposter imp = rift.create(imposter("cursor")
                         .protocol("http")
                         .record()
@@ -58,7 +67,7 @@ class RecordedCursorIT {
 
                 RecordedPage baseline = imp.recordedPage();
                 assertEquals(2, baseline.requests().size());
-                assertTrue(baseline.nextIndex().isPresent(), "the pinned engine must report a cursor");
+                assertTrue(baseline.nextIndex().isPresent(), "every lane must report a cursor");
                 long cursor = baseline.nextIndex().getAsLong();
                 assertFalse(baseline.truncated(), "a baseline read never reports truncation");
 
@@ -103,8 +112,9 @@ class RecordedCursorIT {
     private static Stream<DynamicTest> gated(String name, Executable body) {
         return Stream.of(DynamicTest.dynamicTest(name, () -> {
             assumeTrue(integrationEnabled(), "set RIFT_IT=1 to run the live-engine cursor lane");
-            assumeTrue(ConformanceTransport.selected() == ConformanceTransport.SPAWN,
-                    "the cursor rides in HTTP headers; the FFI transport has none — SPAWN lane only");
+            ConformanceTransport lane = ConformanceTransport.selected();
+            assumeTrue(lane.isAvailable(),
+                    "the " + lane + " lane cannot start an engine here (embedded needs a librift_ffi)");
             body.run();
         }));
     }

@@ -13,9 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A space cursor always carries its {@code flow_id} clause, so on a transport that cannot filter
- * server-side (the SPI default — the in-process FFI shape) every space cursor call must refuse
- * rather than widen: an unfiltered answer would hand back exactly the other flows' entries the
- * space exists to exclude.
+ * server-side (the SPI default's shape — no transport the SDK ships is in it) every space cursor
+ * call must refuse rather than widen: an unfiltered answer would hand back exactly the other flows'
+ * entries the space exists to exclude.
  */
 class SpaceCursorDefaultTransportTest {
 
