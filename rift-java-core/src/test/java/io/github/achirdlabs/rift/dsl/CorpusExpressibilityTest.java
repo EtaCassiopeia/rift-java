@@ -283,6 +283,16 @@ class CorpusExpressibilityTest {
                 .stub(
                         onRequest()
                                 .withPath(endsWith("/tasks"))
+                                .withQuery("status", "OPEN")
+                                .withMethod(deepEquals("GET"))
+                                .scenario("TaskAPI-GetTasks-FilterByStatus")
+                                .willReturn(okJson("""
+                                        {"count": 1, "tasks": [
+                                          {"taskId": "task-001", "name": "Review PR", "status": "OPEN", "priority": "HIGH"}
+                                        ]}
+                                        """)),
+                        onRequest()
+                                .withPath(endsWith("/tasks"))
                                 .withMethod(deepEquals("GET"))
                                 .scenario("TaskAPI-GetTasks-Success")
                                 .willReturn(okJson("""
@@ -293,15 +303,12 @@ class CorpusExpressibilityTest {
                                         ]}
                                         """)),
                         onRequest()
-                                .withPath(endsWith("/tasks"))
-                                .withQuery("status", "OPEN")
+                                .withPath(matches("^/tasks/task-999$"))
                                 .withMethod(deepEquals("GET"))
-                                .scenario("TaskAPI-GetTasks-FilterByStatus")
-                                .willReturn(okJson("""
-                                        {"count": 1, "tasks": [
-                                          {"taskId": "task-001", "name": "Review PR", "status": "OPEN", "priority": "HIGH"}
-                                        ]}
-                                        """)),
+                                .scenario("TaskAPI-GetTaskById-NotFound")
+                                .willReturn(notFound()
+                                        .withHeader("Content-Type", "application/json")
+                                        .withJsonBody("{\"error\":\"Task not found\",\"code\":\"TASK_NOT_FOUND\"}")),
                         onRequest()
                                 .withPath(matches("/tasks/task-\\d+"))
                                 .withMethod(deepEquals("GET"))
@@ -318,13 +325,6 @@ class CorpusExpressibilityTest {
                                           "updatedAt": "2024-01-15T14:30:00Z"
                                         }
                                         """)),
-                        onRequest()
-                                .withPath(matches("/tasks/task-999"))
-                                .withMethod(deepEquals("GET"))
-                                .scenario("TaskAPI-GetTaskById-NotFound")
-                                .willReturn(notFound()
-                                        .withHeader("Content-Type", "application/json")
-                                        .withJsonBody("{\"error\":\"Task not found\",\"code\":\"TASK_NOT_FOUND\"}")),
                         onRequest()
                                 .withPath(endsWith("/tasks"))
                                 .withMethod(deepEquals("POST"))
