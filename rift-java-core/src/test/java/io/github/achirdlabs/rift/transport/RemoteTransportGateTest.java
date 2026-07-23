@@ -100,6 +100,51 @@ class RemoteTransportGateTest {
         }
     }
 
+    /**
+     * The backend-unavailable door (engine 0.16.0, achird-labs/rift#802) carries {@code feature} and
+     * {@code detail} <em>inside</em> {@code errors[0]}, beyond the usual {@code code}/{@code type}/
+     * {@code message}. Envelope decoding must key off {@code errors[0].message} and ignore the rest
+     * rather than reject the object, so a Redis-backed flow-store outage surfaces as its 503 instead
+     * of a decode failure.
+     */
+    @Test
+    void backendUnavailableEnvelopeWithExtraKeysMapsToEngineError() {
+        try (FakeAdminServer server = new FakeAdminServer()) {
+            server.respond("POST /imposters", 503, """
+                    {"errors":[{"code":"503","type":"backend unavailable",\
+                    "message":"flowState: redis connection refused",\
+                    "feature":"flowState","detail":"redis connection refused"}],\
+                    "error":"backendUnavailable","feature":"flowState",\
+                    "detail":"redis connection refused"}""");
+            try (Rift rift = connectNoPreflight(server)) {
+                EngineError ex = assertThrows(EngineError.class, () -> rift.create(imposter("x").port(4545)));
+                assertEquals(503, ex.code());
+                assertEquals("flowState: redis connection refused", ex.getMessage());
+            }
+        }
+    }
+
+    /**
+     * The same door's non-{@code BackendUnavailable} branch: a 500 whose {@code errors[0]} has no
+     * {@code feature} key at all, and whose deprecated top-level keys are {@code error}/{@code detail}
+     * only. Pinned alongside the 503 so neither shape regresses independently.
+     */
+    @Test
+    void internalErrorEnvelopeWithoutFeatureMapsToEngineError() {
+        try (FakeAdminServer server = new FakeAdminServer()) {
+            server.respond("POST /imposters", 500, """
+                    {"errors":[{"code":"500","type":"internal error",\
+                    "message":"flow store write failed: redis connection refused"}],\
+                    "error":"internalError",\
+                    "detail":"flow store write failed: redis connection refused"}""");
+            try (Rift rift = connectNoPreflight(server)) {
+                EngineError ex = assertThrows(EngineError.class, () -> rift.create(imposter("x").port(4545)));
+                assertEquals(500, ex.code());
+                assertEquals("flow store write failed: redis connection refused", ex.getMessage());
+            }
+        }
+    }
+
     @Test
     void unparseableSuccessBodyMapsToCommunicationError() {
         try (FakeAdminServer server = new FakeAdminServer()) {
